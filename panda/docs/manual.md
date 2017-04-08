@@ -382,6 +382,9 @@ end_record:
     be resumed and another recording can be made once the guest is
     resumed.
 
+A commandline flag `-record-from <snapshot>:<record-name>` to restores a
+qcow2 snapshot and immediately start recording is also provided for convenience.
+
 Start replays from the command line using the `-replay <name>` option. 
 
 Of course, just running a replay isn't very useful by itself, so you
