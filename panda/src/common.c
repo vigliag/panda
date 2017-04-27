@@ -30,6 +30,7 @@ static inline uint32_t regime_el(CPUARMState *env, ARMMMUIdx mmu_idx)
     case ARMMMUIdx_S1SE1:
     case ARMMMUIdx_S1NSE0:
     case ARMMMUIdx_S1NSE1:
+    case ARMMMUIdx_S12NSE1:
         return 1;
     default:
         g_assert_not_reached();
@@ -125,7 +126,7 @@ target_ulong panda_current_sp(CPUState *cpu) {
   return env->regs[13];
 #elif defined(TARGET_PPC)
   // R1 on PPC.
-  return env->regs[1];
+  return env->gpr[1];
 #else
 #error "panda_current_asid() not implemented for target architecture."
   return 0;

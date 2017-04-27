@@ -218,6 +218,7 @@ void * panda_get_plugin_by_name(const char *plugin_name) {
 }
 
 void panda_register_callback(void *plugin, panda_cb_type type, panda_cb cb) {
+    panda_cb_list *plist;
     panda_cb_list *new_list = g_new0(panda_cb_list,1);
     new_list->entry = cb;
     new_list->owner = plugin;
@@ -225,10 +226,13 @@ void panda_register_callback(void *plugin, panda_cb_type type, panda_cb cb) {
     new_list->next = NULL;
     new_list->enabled = true;
     if(panda_cbs[type] != NULL) {
-        new_list->next = panda_cbs[type];
-        panda_cbs[type]->prev = new_list;
+        for(plist = panda_cbs[type]; plist->next != NULL; plist = plist->next);
+        plist->next = new_list;
+        new_list->prev = plist;
     }
-    panda_cbs[type] = new_list;
+    else {
+        panda_cbs[type] = new_list;
+    }
 }
 
 
@@ -511,7 +515,7 @@ static bool panda_parse_bool_internal(panda_arg_list *args, const char *argname,
     for (i = 0; i < args->nargs; i++) {
         if (strcmp(args->list[i].key, argname) == 0) {
             char *val = args->list[i].value;
-            if (strcmp("false", val) == 0 || strcmp("no", val) == 0) {
+            if (strcasecmp("false", val) == 0 || strcasecmp("no", val) == 0) {
                 return false;
             } else {
                 return true;
@@ -783,13 +787,6 @@ void panda_free_args(panda_arg_list *args) {
 #ifdef CONFIG_SOFTMMU
 
 // QMP
-
-
-void qmp_load_plugin(const char *filename, Error **errp);
-void qmp_unload_plugin(int64_t index, Error **errp);
-void qmp_list_plugins(Error **errp);
-void qmp_plugin_cmd(const char * cmd, Error **errp);
-
 
 void qmp_load_plugin(const char *filename, Error **errp) {
     if(!panda_load_plugin(filename, NULL)) {
