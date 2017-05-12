@@ -20,6 +20,7 @@
 #include <map>
 #include <set>
 #include <unordered_set>
+#include <unordered_map>
 
 extern "C" {
 #include <stdio.h>
@@ -30,7 +31,6 @@ extern "C" {
 bool init_plugin(void *);
 void uninit_plugin(void *);
 }
-
 
 using namespace std;
 using fnid = target_ulong;
@@ -117,8 +117,7 @@ int before_block_exec_cb(CPUState *cpu, TranslationBlock *tb){
     //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
 
     // only go on if the asid is the one we are tracking
-    if (panda_in_kernel(cpu) ||
-        tracked_asid != current_asid){
+    if (panda_in_kernel(cpu) || tracked_asid != current_asid){
         return 0;
     }
     
@@ -140,9 +139,83 @@ int before_block_exec_cb(CPUState *cpu, TranslationBlock *tb){
     return 0;
 }
 
+/* Writeset and readset tracking */
+
+// We log the first 5 calls to any given function, together with their writeset,
+// readset, etcetera
+
+struct CallInfo {
+    std::set<target_ulong> writeset;
+    std::set<target_ulong> readset;
+    target_ulong program_counter;
+    uint64_t instruction_count_call;
+    uint64_t instruction_count_ret;
+};
+
+//fnid -> number of calls
+std::unordered_map<uint64_t, int> calls;
+
+//call_id -> CallInfo
+std::unordered_map<uint64_t, CallInfo> call_infos; 
+
+int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
+                       target_ulong size, void *buf) {
+    //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+    
+    if (panda_in_kernel(cpu) || tracked_asid != current_asid){
+        return 0;
+    }
+
+    callstack_stack_entry entry;
+    int entries_n = get_call_entries(&entry, 1,cpu);
+    assert(entries_n);
+    
+    if( call_infos.count(entry.call_id)){
+        // if the call is already being logged, log this write
+        call_infos[entry.call_id].writeset.insert(addr);
+
+    } else if(calls[entry.function] < 5) {
+        // we still have calls to log, let's do that, then log this write
+        calls[entry.function]++;
+        call_infos[entry.call_id].program_counter = entry.function;
+        call_infos[entry.call_id].writeset.insert(addr);
+
+    } else {
+        // we won't log any more calls
+    }
+
+    return 0;
+}
+
+
+int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
+                       target_ulong size) {
+    //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+    
+    callstack_stack_entry entry;
+    int entries_n = get_call_entries(&entry, 1,cpu);
+    assert(entries_n);
+    
+    if( call_infos.count(entry.call_id)){
+        // if the call is already being logged, log this access
+        call_infos[entry.call_id].readset.insert(addr);
+
+    } else if(calls[entry.function] < 5) {
+        // we still have calls to log, let's do that, then log this access
+        calls[entry.function]++;
+        call_infos[entry.call_id].program_counter = entry.function;
+        call_infos[entry.call_id].readset.insert(addr);
+
+    } else {
+        // we won't log any more calls
+    }
+    
+    return 0;
+}
+
+/* Plugin initialization */
 
 void *plugin_self;
-
 bool init_plugin(void *self) {
     plugin_self = self;
  
@@ -156,9 +229,16 @@ bool init_plugin(void *self) {
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
     pcb.asid_changed = asid_changed;
     panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
+    pcb.virt_mem_after_write = mem_write_callback;
+    panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_WRITE, pcb);
+    pcb.virt_mem_before_read = mem_read_callback;
+    panda_register_callback(self, PANDA_CB_VIRT_MEM_BEFORE_READ, pcb);
+    
+    //PPP_REG_CB("callstack_instr", on_call2, on_call);
+    //PPP_REG_CB("callstack_instr", on_ret2, on_ret);
 
-    //TODO actually needed?
-    panda_disable_tb_chaining();
+    panda_disable_tb_chaining();  //TODO actually needed?
+    panda_enable_memcb();
 
     panda_arg_list *args = panda_get_args("fndetectcrypto");
     if (args != NULL) {
@@ -171,11 +251,40 @@ bool init_plugin(void *self) {
 }
 
 
+std::string setToString(std::set<target_ulong> addrset){
+    target_ulong base = 0;
+    target_ulong consecutive = 0;
+    std::stringstream ss;
+    for (const auto& addr : addrset) {
+        if(addr == base + consecutive + 1){
+            consecutive++;
+        } else {
+            if(base){
+                ss << reinterpret_cast<void*>(base) << "+" << consecutive << ";";
+            }
+            consecutive = 0;
+            base = addr;
+        }
+    }
+    if(base){
+        ss << reinterpret_cast<void*>(base) << "+" << consecutive << ";";
+    }
+    return ss.str();
+}
+
+
 void printstats(){
+    
+    std::cout << "Logged calls: " << endl;
+    for(auto const& callid_call : call_infos){
+        auto& call = callid_call.second;
+        std::cout << call.program_counter << " " << setToString(call.writeset) << " " << setToString(call.readset) << std::endl;
+    }
+
+
     std::cout << "Stats (function_entrypoint, arit, arit/tot)" << std::endl;
     for (auto const& fn_count : totalCount){
         const InstCount& count = fn_count.second;
-
         std::cout << fn_count.first << " " << count.arit 
             << " " << (float)count.arit / count.tot << std::endl;
     }

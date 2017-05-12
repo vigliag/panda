@@ -1,7 +1,6 @@
 #ifndef __CALLSTACK_INSTR_INT_FNS_H__
 #define __CALLSTACK_INSTR_INT_FNS_H__
 
-
 // Public interface
 
 // Get up to n callers from the given address space at this moment
@@ -23,5 +22,6 @@ Panda__CallStack *pandalog_callstack_create(void);
 // free that data structure
 void pandalog_callstack_free(Panda__CallStack *cs);
 
+int get_call_entries(callstack_stack_entry* entries, int n, CPUState *cpu);
 
 #endif

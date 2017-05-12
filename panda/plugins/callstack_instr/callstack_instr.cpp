@@ -52,54 +52,38 @@ void uninit_plugin(void *);
 PPP_PROT_REG_CB(on_call);
 PPP_PROT_REG_CB(on_ret);
 
+PPP_PROT_REG_CB(on_call2);
+PPP_PROT_REG_CB(on_ret2);
 }
 
 PPP_CB_BOILERPLATE(on_call);
 PPP_CB_BOILERPLATE(on_ret);
 
-enum instr_type {
-  INSTR_UNKNOWN = 0,
-  INSTR_CALL,
-  INSTR_RET,
-  INSTR_SYSCALL,
-  INSTR_SYSRET,
-  INSTR_SYSENTER,
-  INSTR_SYSEXIT,
-  INSTR_INT,
-  INSTR_IRET,
-};
+PPP_CB_BOILERPLATE(on_call2);
+PPP_CB_BOILERPLATE(on_ret2)
 
-struct stack_entry {
-    target_ulong pc;
-    instr_type kind;
-};
 
-#define MAX_STACK_DIFF 5000
-
+//Capstone handles
 csh cs_handle_32;
 csh cs_handle_64;
 
-// Track the different stacks we have seen to handle multiple threads
-// within a single process.
-std::map<target_ulong,std::set<target_ulong>> stacks_seen;
 
-// Use a typedef here so we can switch between the stack heuristic and
-// the original code easily
-#ifdef USE_STACK_HEURISTIC
+/* Data structures */
+
+using instr_type = callstack_instr_type;
+using stack_entry = callstack_stack_entry;
+
+// pair of asid_identifier and thread_identifier
 typedef std::pair<target_ulong,target_ulong> stackid;
-target_ulong cached_sp = 0;
-target_ulong cached_asid = 0;
-#else
-typedef target_ulong stackid;
-#endif
 
 // stackid -> shadow stack
 std::map<stackid, std::vector<stack_entry>> callstacks;
-// stackid -> function entry points
-std::map<stackid, std::vector<target_ulong>> function_stacks;
+
 // EIP -> instr_type
 std::map<target_ulong, instr_type> call_cache;
-int last_ret_size = 0;
+
+
+/* Helpers */
 
 static inline bool in_kernelspace(CPUArchState* env) {
 #if defined(TARGET_I386)
@@ -122,56 +106,90 @@ static inline target_ulong get_stack_pointer(CPUArchState* env) {
 }
 
 static stackid get_stackid(CPUArchState* env) {
-#ifdef USE_STACK_HEURISTIC
-    target_ulong asid;
-
-    // Track all kernel-mode stacks together
-    if (in_kernelspace(env))
-        asid = 0;
-    else
-        asid = panda_current_asid(ENV_GET_CPU(env));
-
-    // Invalidate cached stack pointer on ASID change
-    if (cached_asid == 0 || cached_asid != asid) {
-        cached_sp = 0;
-        cached_asid = asid;
-    }
-
-    target_ulong sp = get_stack_pointer(env);
-
-    // We can short-circuit the search in most cases
-    if (std::abs(sp - cached_sp) < MAX_STACK_DIFF) {
-        return std::make_pair(asid, cached_sp);
-    }
-
-    auto &stackset = stacks_seen[asid];
-    if (stackset.empty()) {
-        stackset.insert(sp);
-        cached_sp = sp;
-        return std::make_pair(asid,sp);
-    }
-    else {
-        // Find the closest stack pointer we've seen
-        auto lb = std::lower_bound(stackset.begin(), stackset.end(), sp);
-        target_ulong stack1 = *lb;
-        lb--;
-        target_ulong stack2 = *lb;
-        target_ulong stack = (std::abs(stack1 - sp) < std::abs(stack2 - sp)) ? stack1 : stack2;
-        int diff = std::abs(stack-sp);
-        if (diff < MAX_STACK_DIFF) {
-            return std::make_pair(asid,stack);
-        }
-        else {
-            stackset.insert(sp);
-            cached_sp = sp;
-            return std::make_pair(asid,sp);
-        }
-    }
-#else
-    return panda_current_asid(ENV_GET_CPU(env));
-#endif
+    #ifdef USE_STACK_HEURISTIC
+        return get_stackid_from_closest_seen_stack(env);
+    #else
+        return std::make_pair(panda_current_asid(ENV_GET_CPU(env)),0);
+    #endif
 }
 
+#ifdef USE_STACK_HEURISTIC
+static stackid get_stackid_from_closest_seen_stack(CPUArchState* env) {
+    const target_ulong MAX_STACK_DIFF = 5000;
+    
+    // asid (process) -> set of seen stackpointers
+    static std::map<target_ulong,std::set<target_ulong>> stacks_seen;
+
+    // we cache the last seen stackpointer for the last seen process
+    // the cache is invalidated when the process changes
+    static target_ulong last_seen_sp = 0;
+    static target_ulong last_seen_sp_asid = 0;
+
+    // Get the current asid, asid=0 if in kernelspace
+    target_ulong current_asid = in_kernelspace(env) ? 0 : panda_current_asid(ENV_GET_CPU(env));
+    // Get the stackpointer for the current processor
+    target_ulong current_sp = get_stack_pointer(env);
+
+    // If the last_seen_sp is still valid
+    if (last_seen_sp && last_seen_sp_asid == current_asid) {
+        
+        // Try with the last_seen_sp first
+        if (std::abs(current_sp - last_seen_sp) < MAX_STACK_DIFF) {
+            return std::make_pair(current_asid, last_seen_sp);
+        }
+
+    } else {
+
+        // mark the last_seen_sp as invalid
+        last_seen_sp = 0;
+    }
+    
+    auto &stackset = stacks_seen[current_asid];
+
+    // If it's the first sp we've seen, insert it into the set, and return it
+    if (stackset.empty()) {
+        stackset.insert(current_sp);
+        last_seen_sp = current_sp;
+        last_seen_sp_asid = current_asid;
+        return std::make_pair(current_asid,current_sp);
+    }
+    
+    // Find the closest stack pointer we've seen
+    target_ulong closest_known_sp = 0;
+    auto lb = stackset.lower_bound(current_sp);
+
+    if (lb != stackset.end()) {
+        closest_known_sp = *lb;
+    }
+
+    if (lb != stackset.begin()) {
+        target_ulong value_less_than = *(lb-1);
+        if( !closest_known_sp || std::abs(value_less_than - current_sp) < std::abs(closest_known_sp - current_sp) ){
+            closest_known_sp = current_sp;
+        }
+    }
+
+    // Is the closest_known_sp close enough?
+    int diff = std::abs(current_sp - closest_known_sp);
+    if (diff < MAX_STACK_DIFF) {
+        last_seen_sp = current_sp;
+        last_seen_sp_asid = current_asid;
+        return std::make_pair(current_asid, closest_known_sp);
+    }
+    
+    // If it's not close enough, then classify it as a new stack,
+    // remember and return it
+    stackset.insert(current_sp);
+    last_seen_sp = current_sp;
+    last_seen_sp_asid = current_asid;
+    return std::make_pair(current_asid,current_sp);
+}
+#endif
+
+/**
+Disassembles a block of code, then returns the instr_type of the last
+instruction (CALL, RET, or UNKNOWN)
+*/
 instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
     unsigned char *buf = (unsigned char *) malloc(size);
     int err = panda_virtual_memory_rw(ENV_GET_CPU(env), pc, buf, size, 0);
@@ -221,6 +239,8 @@ done2:
     return res;
 }
 
+// Every time a block is translated, save in call_cache the kind of instruction
+// it ends with
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     call_cache[tb->pc] = disas_block(env, tb->pc, tb->size);
@@ -228,22 +248,27 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     return 1;
 }
 
+// Before a block is executed, check if program-counter we are jumping in
+// is a return address, it is is, then we are returning, and we can remove our
+// stackframe from our shadow stack
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    std::vector<stack_entry> &v = callstacks[get_stackid(env)];
-    std::vector<target_ulong> &w = function_stacks[get_stackid(env)];
+    stackid current_stackid = get_stackid(env);
+    target_ulong pc = tb->pc;
+
+    // TODO should check if the last executed instruction is indeed a return?
+
+    std::vector<stack_entry> &v = callstacks[current_stackid];
     if (v.empty()) return 1;
 
-    // Search up to 10 down
+    // In case we missed some return, we check until depth 10 in our shadow 
+    // stack
     for (int i = v.size()-1; i > ((int)(v.size()-10)) && i >= 0; i--) {
-        if (tb->pc == v[i].pc) {
-            //printf("Matched at depth %d\n", v.size()-i);
-            //v.erase(v.begin()+i, v.end());
+        if (pc == v[i].return_address) {
+            PPP_RUN_CB(on_ret2, cpu, v[i].function, v[i].call_id, v.size() -i -1);
+            PPP_RUN_CB(on_ret, cpu, v[i].function);
 
-            PPP_RUN_CB(on_ret, cpu, w[i]);
             v.erase(v.begin()+i, v.end());
-            w.erase(w.begin()+i, w.end());
-
             break;
         }
     }
@@ -251,21 +276,32 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     return 0;
 }
 
+// After a block executes, we check if its last instruction was a CALL
+// if it is, then we add a new frame to our shadow stack
 int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     instr_type tb_type = call_cache[tb->pc];
 
     if (tb_type == INSTR_CALL) {
-        stack_entry se = {tb->pc+tb->size,tb_type};
-        callstacks[get_stackid(env)].push_back(se);
 
-        // Also track the function that gets called
+        // This retrieves the pc in an architecture-neutral way
+        // The program counter, updated by the call, is the address of the
+        // called function
         target_ulong pc, cs_base;
         uint32_t flags;
-        // This retrieves the pc in an architecture-neutral way
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
-        function_stacks[get_stackid(env)].push_back(pc);
 
+        stackid current_stackid = get_stackid(env);
+
+        stack_entry se;
+        se.function = pc;
+        se.return_address = tb->pc + tb->size;
+        se.kind = tb_type;
+        se.call_id = rr_get_guest_instr_count();
+
+        callstacks[current_stackid].push_back(se);
+
+        PPP_RUN_CB(on_call2, cpu, pc, se.call_id);
         PPP_RUN_CB(on_call, cpu, pc);
     }
     else if (tb_type == INSTR_RET) {
@@ -283,11 +319,21 @@ int get_callers(target_ulong callers[], int n, CPUState* cpu) {
     auto rit = v.rbegin();
     int i = 0;
     for (/*no init*/; rit != v.rend() && i < n; ++rit, ++i) {
-        callers[i] = rit->pc;
+        callers[i] = rit->return_address;
     }
     return i;
 }
 
+int get_call_entries(struct callstack_stack_entry entries[], int n, CPUState *cpu){
+    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
+    std::vector<stack_entry> &v = callstacks[get_stackid(env)];
+    auto rit = v.rbegin();
+    int i = 0;
+    for (/*no init*/; rit != v.rend() && i < n; ++rit, ++i) {
+        entries[i] = *rit;
+    }
+    return i;
+}
 
 // writes an entry to the pandalog with callstack info (and instr count and pc)
 Panda__CallStack *pandalog_callstack_create() {
@@ -308,7 +354,7 @@ Panda__CallStack *pandalog_callstack_create() {
     rit = v.rbegin();
     uint32_t i=0;
     for (/*no init*/; rit != v.rend() && n < 16; ++rit, ++i) {
-        cs->addr[i] = rit->pc;
+        cs->addr[i] = rit->return_address;
     }
     return cs;
 }
@@ -322,14 +368,14 @@ void pandalog_callstack_free(Panda__CallStack *cs) {
 
 int get_functions(target_ulong functions[], int n, CPUState* cpu) {
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    std::vector<target_ulong> &v = function_stacks[get_stackid(env)];
+    auto &v = callstacks[get_stackid(env)];
     if (v.empty()) {
         return 0;
     }
     auto rit = v.rbegin();
     int i = 0;
     for (/*no init*/; rit != v.rend() && i < n; ++rit, ++i) {
-        functions[i] = *rit;
+        functions[i] = rit->function;
     }
     return i;
 }
