@@ -17,172 +17,23 @@ int guest_hypercall_callback(CPUState *cpu);
 #define SYSTAINT_MAGIC 0xffaaffcc
 
 #include <iostream>
-#include <boost/regex.hpp>
 #include <sstream>
 #include <string>
 #include <fstream>
-#include <boost/optional.hpp>
 #include <map>
 #include <set>
 #include <unordered_set>
 #include <stdio.h>
 
 using namespace std;
-using boost::optional;
+#include "syscallparser.hpp"
 
-struct Syscall {
-    int callno = -1;
-    std::string name;
-    std::string retval;
-    std::vector<std::string> argDefs;
-};
+/* Data structures */
 
+// parsed syscall definitions
 static std::vector<Syscall> syscalls;
 
-// dependency tree for syscalls
-using dependencySet = std::unordered_set<uint32_t>;
-static std::map<uint32_t, dependencySet> dependencies;
-
-//to recognize a sysenter after it's been translated
-static std::set<std::pair <target_ulong, target_ulong>> syscallPCpoints;
-
-#ifdef TARGET_I386
-// we track a single syscall and process at a time
-static uint32_t tracked_syscall = 0;
-static uint32_t tracked_asid = 0;
-
-// counters have an idea of how many read and writes we are talking about
-static int n_mem_writes_to_taint = 0;
-static int n_mem_reads_to_query = 0;
-#endif
-
-optional<Syscall> parsePrototype(const std::string& prototype){
-    static boost::regex syscallRegex(R"((\d+)\s+(\w+)\s+(\w+)\s*\((.*)\);)");
-    static boost::regex argsRegex(R"(\s?([^,]+))");
-
-    boost::smatch syscallMatches;
-
-    bool matched = boost::regex_match(prototype, syscallMatches, syscallRegex);
-    if(!matched) return {};
-
-    //for (unsigned i=1; i<syscallMatches.size(); ++i) {
-    //   std::cout << "[" << syscallMatches[i] << "] ";
-    //}
-
-    Syscall s;
-    s.callno = stoi(syscallMatches[1]);
-    s.retval = syscallMatches[2].str();
-    s.name = syscallMatches[3].str();
-
-    string argsRaw = syscallMatches[4].str();
-
-    boost::smatch argsMatches;
-    while (boost::regex_search(argsRaw, argsMatches, argsRegex)) {
-      s.argDefs.push_back(argsMatches[1].str());
-      argsRaw = argsMatches.suffix();
-    }
-
-    return s;
-}
-
-
-#ifdef TARGET_I386
-
-size_t paramSize(const Syscall& sc){
-    return sc.argDefs.size() * 4;
-}
-
-uint64_t getArgStartPA(CPUState *cpu){
-    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
-    cout << "converting " << env->regs[R_EDX] + 8 << " to physical" << endl;
-    return panda_virt_to_phys(cpu, env->regs[R_EDX] + 8);
-}
-
-
-bool isUserSpaceAddress(uint64_t virt_addr){
-    const uint64_t MMUserProbeAddress = 0x7fff0000; // Start of kernel memory
-    return virt_addr < MMUserProbeAddress;
-}
-
-int dependencyAdder(uint32_t new_label, void *this_label_){
-    uint32_t this_label = *(uint32_t*) this_label_;
-    dependencySet& depSet = dependencies[this_label];
-
-    if (depSet.count(new_label) == 0){
-        printf("adding dependency %d -> %d", new_label, this_label);
-        depSet.insert(new_label);
-    }
-    return 0;
-}
-
-void onSysEnter(CPUState *cpu, target_ulong pc){
-    
-    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
-
-    uint32_t syscall_no = env->regs[R_EAX];
-
-    cout << "Sysenter, no: " << syscall_no << " ";
-    Syscall sc;
-
-    if(syscall_no >= syscalls.size()){
-        cout << endl;
-        return;
-    } else {
-        sc = syscalls[syscall_no];
-    }
-
-    cout << sc.name << endl;
-    
-    //get id from the last call we've been notified from cuckoo
-    uint32_t taint_label = tracked_syscall;
-
-    //take size and location of function parameters
-    uint64_t arg_start = getArgStartPA(cpu);
-    
-    if(arg_start == -1){
-        cout << "ERROR panda_virt_to_phys errored" <<endl;
-        return;
-    }
-
-    size_t arg_len = paramSize(sc);
-
-    if(!taint2_enabled()){
-        return;
-    }
-
-    cout << "Reading taint from " << arg_start << " to " << arg_start + arg_len;
-
-    //read taint for those args, add to dependences
-    for(size_t i=0; i<arg_len; i++){
-        uint64_t ptr = arg_start + i;
-        taint2_labelset_ram_iter(ptr, dependencyAdder, &taint_label);
-    }
-    cout << "done" << endl;
-    // TODO take pointers from args, add to monitored set
-    // TODO taint EAX on sysExit (not required on windows)
-
-    cout << "Re-tainting";
-    //clear taint and re-taint with current syscall num
-    for(size_t i=0; i<arg_len; i++){
-        uint64_t ptr = arg_start + i;
-        taint2_delete_ram(ptr);
-        taint2_label_ram(ptr, taint_label);
-    }
-    cout << "done" << endl;
-}
-
-/*
-    Eg: read(filep, buffer, size)
-    assign to read the id from most external syscall
-    check if filepointer, bufferpointer and size are tainted
-    buffer is a pointer, add it to candidate set
-
-    then write(network, buffer, size)
-    assign id from latest syscall
-    read taint from args (eg network and bufferptr)
-    clear taint, retaint
-*/
-
+/** Parses syscall definitions, called on plugin init */
 void parseSyscallDefs(const std::string& prototypesFilename){
     std::ifstream infile(prototypesFilename);
     std::string line;
@@ -195,21 +46,169 @@ void parseSyscallDefs(const std::string& prototypesFilename){
             syscalls.push_back(*parsedSyscall);
         }
     }
-
 }
 
-void printOutDeps(){
-    for (auto it=dependencies.begin(); it!=dependencies.end(); ++it){
-        uint32_t to = it->first;
-        const dependencySet& depset = it->second;
+// Dependency tree we are going to build
+using dependencySet = std::unordered_set<uint32_t>;
+static std::map<uint32_t, dependencySet> dependencies;
 
-        for (auto depit = depset.begin(); depit!=depset.end(); ++depit){
-            uint32_t from = *depit;
-            printf("DEPENDENCY %d %d \n", from, to);
-        }
+// A SyscallPCpoint is added when a sysenter is translated, so that we can then recognize it when the sysenter actually happens
+static std::set<std::pair <target_ulong, target_ulong>> syscallPCpoints;
+
+#ifdef TARGET_I386
+// we track a single syscall and process at a time
+// tracked_syscall is the last syscall cuckoo notified us
+static uint32_t tracked_syscall = 0;
+static uint32_t tracked_asid = 0;
+
+// counters have an idea of how many read and writes we are talking about
+static int n_mem_writes_to_taint = 0;
+static int n_mem_reads_to_query = 0;
+#endif
+
+
+#ifdef TARGET_I386
+
+size_t paramSize(const Syscall& sc){
+    return sc.argDefs.size() * 4;
+}
+
+/* On sysenter, it takes the PA of the parameters of the current syscall */
+uint64_t getArgStartPA(CPUState *cpu){
+    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+    cout << "converting " << env->regs[R_EDX] + 8 << " to physical" << endl;
+    return panda_virt_to_phys(cpu, env->regs[R_EDX] + 8);
+}
+
+/* On windows, checks if a virtual address is in user-space */
+bool isUserSpaceAddress(uint64_t virt_addr){
+    const uint64_t MMUserProbeAddress = 0x7fff0000; // Start of kernel memory
+    return virt_addr < MMUserProbeAddress;
+}
+
+/* Used as a callback to add new_label as a dependency to this_label
+   uses global data structures */
+int dependencyAdder(uint32_t new_label, void *this_label_){
+    uint32_t this_label = *(uint32_t*) this_label_;
+    dependencySet& depSet = dependencies[this_label];
+
+    if (depSet.count(new_label) == 0){
+        printf("adding dependency %d -> %d", new_label, this_label);
+        depSet.insert(new_label);
     }
+    return 0;
 }
 
+/* Syscall detection handling */
+
+/* When an instruction is being translated, check if it's a sysenter, if it is
+   add the target pc to syscallPCpoints. This code is copied from syscall2 */
+bool translate_callback(CPUState *cpu, target_ulong pc) {
+#ifdef TARGET_I386
+    if(tracked_asid != panda_current_asid(cpu))
+        return false; 
+
+    unsigned char buf[2] = {};
+    panda_virtual_memory_rw(cpu, pc, buf, 2, 0);
+    // Check if the instruction is syscall (0F 05)
+    if (buf[0]== 0x0F && buf[1] == 0x05) {
+        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
+        return true;
+    }
+    // Check if the instruction is int 0x80 (CD 80)
+    else if (buf[0]== 0xCD && buf[1] == 0x80) {
+        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
+        return true;
+    }
+    // Check if the instruction is sysenter (0F 34)
+    else if (buf[0]== 0x0F && buf[1] == 0x34) {
+        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
+        return true;
+    }
+    else {
+        return false;
+    }
+#endif
+return false;
+}
+
+#ifdef TARGET_I386
+
+
+
+/* When a sysenter is being executed, and we are about to jump in kernel-space.
+Note this is only executed for interesting asid (filtering has been done on translate_callback) */
+void onSysEnter(CPUState *cpu, target_ulong pc){
+    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+    
+    uint32_t syscall_no = env->regs[R_EAX];
+    cout << "Sysenter, no: " << syscall_no << " ";
+
+    // Retrieve the syscall definition or return
+    // (there are currently several nondefined syscalls which we ignore)
+    Syscall sc;
+    if(syscall_no >= syscalls.size()){
+        cout << endl;
+        return;
+    } else {
+        sc = syscalls[syscall_no];
+    }
+
+    cout << sc.name << endl;
+    
+    //get id from the last call we've been notified from cuckoo
+    uint32_t taint_label = tracked_syscall;
+
+    //take size and location of syscall parameters
+    uint64_t arg_start = getArgStartPA(cpu);
+    if(arg_start == -1){
+        cout << "ERROR panda_virt_to_phys errored" <<endl;
+        return;
+    }
+
+    size_t arg_len = paramSize(sc);
+
+    /* Taint should be enabled by the first interesting event.
+    If it's not enabled, it means we haven't started tracking things yet */
+    if(!taint2_enabled()){
+        return;
+    }
+
+    /* Read taint for syscall args, the current event depends on the ones who
+    tainted the arguments of the current syscall */
+    cout << "Reading taint from " << arg_start << " to " << arg_start + arg_len;
+    for(size_t i=0; i<arg_len; i++){
+        uint64_t ptr = arg_start + i;
+        taint2_labelset_ram_iter(ptr, dependencyAdder, &taint_label);
+    }
+    cout << "done" << endl;
+
+    // TODO taint EAX on sysExit (not required on windows)
+
+    /* We now clear the taint from these arguments, and taint them again with
+    the label of the current event. We do this to taint the pointers, so that 
+    anytime this syscall uses them to write to memory, the result is also 
+    tainted */ 
+    cout << "Re-tainting";
+    for(size_t i=0; i<arg_len; i++){
+        uint64_t ptr = arg_start + i;
+        taint2_delete_ram(ptr);
+        taint2_label_ram(ptr, taint_label);
+    }
+    cout << "done" << endl;
+}
+
+/* When we execute an instruction (for which translate_callback returned true),
+we check if it was the Sysenter we saw before */
+int exec_callback(CPUState *cpu, target_ulong pc) {
+    auto current_asid = panda_current_asid(cpu);
+    if (syscallPCpoints.end() != 
+        syscallPCpoints.find(std::make_pair(pc,current_asid))){
+        onSysEnter(cpu, pc);
+    }
+    return 0;
+}
+#endif
 
 void i386_hypercall_callback(CPUState *cpu){
     CPUArchState *env = (CPUArchState*)cpu->env_ptr;
@@ -254,15 +253,11 @@ void i386_hypercall_callback(CPUState *cpu){
 
 }
 
-int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
+int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
-    CPUArchState *archEnv = (CPUArchState*)env->env_ptr;
+    //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
     
-    if(!tracked_syscall){
-        return 0;
-    }
-
-    if (tracked_asid != panda_current_asid(ENV_GET_CPU(archEnv)) ){
+    if (!tracked_syscall || tracked_asid != panda_current_asid(cpu)){
         return 0;
     }
 
@@ -276,29 +271,27 @@ int mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
 }
 
 // TODO substitute me with taint-changed, should be faster (less queries)
-int mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr,
+int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size) {
-    CPUArchState *archEnv = (CPUArchState*)env->env_ptr;
+    //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
 
     if (!tracked_syscall
-         || tracked_asid != panda_current_asid(ENV_GET_CPU(archEnv)) 
+         || tracked_asid != panda_current_asid(cpu) 
          || !isUserSpaceAddress(addr)){
         return 0;
     }
 
-    //TODO read taint also for successive bytes
-    
-    uint32_t taint_label = tracked_syscall;
-    uint64_t ptr = panda_virt_to_phys(env, addr);
-    
+    uint64_t ptr = panda_virt_to_phys(cpu, addr);
     if(ptr == -1){
         cout << "panda_virt_to_phys " << addr << " errored" << endl;
         return 0;
     }
 
-    cout << "Reading deps of " << tracked_syscall << " from " << ptr << endl;
-    taint2_labelset_ram_iter(ptr, dependencyAdder, &taint_label);
-    cout << " done" << endl;
+    for(uint64_t i=0; i< size; i++){
+        cout << "Reading deps of " << tracked_syscall << " from " << ptr + i << endl;
+        taint2_labelset_ram_iter(ptr + i, dependencyAdder, &tracked_syscall);
+        cout << " done" << endl;
+    }
 
     n_mem_reads_to_query++;
 
@@ -319,47 +312,6 @@ int guest_hypercall_callback(CPUState *cpu){
 }
 
 
-bool translate_callback(CPUState *cpu, target_ulong pc) {
-#ifdef TARGET_I386
-    if(tracked_asid != panda_current_asid(cpu))
-        return false; 
-
-    unsigned char buf[2] = {};
-    panda_virtual_memory_rw(cpu, pc, buf, 2, 0);
-    // Check if the instruction is syscall (0F 05)
-    if (buf[0]== 0x0F && buf[1] == 0x05) {
-        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
-        return true;
-    }
-    // Check if the instruction is int 0x80 (CD 80)
-    else if (buf[0]== 0xCD && buf[1] == 0x80) {
-        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
-        return true;
-    }
-    // Check if the instruction is sysenter (0F 34)
-    else if (buf[0]== 0x0F && buf[1] == 0x34) {
-        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
-        return true;
-    }
-    else {
-        return false;
-    }
-#endif
-return false;
-}
-
-#ifdef TARGET_I386
-// This will only be called for instructions where the
-// translate_callback returned true
-int exec_callback(CPUState *cpu, target_ulong pc) {
-    // check if pc, asid pair was for a valid syscall translation point
-    // if so run exec_callback
-    if (syscallPCpoints.end() != syscallPCpoints.find(std::make_pair(pc, panda_current_asid(cpu)))){
-        onSysEnter(cpu, pc);
-    }
-    return 0;
-}
-#endif
 
 
 void *plugin_self;
@@ -396,6 +348,18 @@ bool init_plugin(void *self) {
 #endif
 
     return true;
+}
+
+
+void printOutDeps(){
+    for (auto& it : dependencies){
+        uint32_t to = it.first;
+        const dependencySet& depset = it.second;
+
+        for (auto& from : depset){
+            printf("DEPENDENCY %d %d \n", from, to);
+        }
+    }
 }
 
 
