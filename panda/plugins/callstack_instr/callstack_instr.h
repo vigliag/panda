@@ -15,11 +15,12 @@ enum callstack_instr_type {
   INSTR_IRET,
 };
 
-struct callstack_stack_entry {
+struct CallstackStackEntry {
     target_ulong function; //function entrypoint
     target_ulong return_address;  //return address
     callstack_instr_type kind;  //way the function has been called
     uint64_t call_id; //unique identifier for this function call (will be set to the instruction count)
+    uint64_t called_by; //callid of the calling function
 };
 
 typedef void (* on_call_t)(CPUState *env, target_ulong func);

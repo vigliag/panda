@@ -71,7 +71,7 @@ csh cs_handle_64;
 /* Data structures */
 
 using instr_type = callstack_instr_type;
-using stack_entry = callstack_stack_entry;
+using stack_entry = CallstackStackEntry;
 
 // pair of asid_identifier and thread_identifier
 typedef std::pair<target_ulong,target_ulong> stackid;
@@ -298,6 +298,8 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         se.return_address = tb->pc + tb->size;
         se.kind = tb_type;
         se.call_id = rr_get_guest_instr_count();
+        se.called_by = callstacks[current_stackid].empty() ? 
+            0 : callstacks[current_stackid].back().call_id;
 
         callstacks[current_stackid].push_back(se);
 
@@ -324,7 +326,7 @@ int get_callers(target_ulong callers[], int n, CPUState* cpu) {
     return i;
 }
 
-int get_call_entries(struct callstack_stack_entry entries[], int n, CPUState *cpu){
+int get_call_entries(struct CallstackStackEntry entries[], int n, CPUState *cpu){
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     std::vector<stack_entry> &v = callstacks[get_stackid(env)];
     auto rit = v.rbegin();

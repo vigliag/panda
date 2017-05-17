@@ -48,6 +48,7 @@ struct CallInfo {
     target_ulong program_counter;
     uint64_t instruction_count_call;
     uint64_t instruction_count_ret;
+    uint64_t called_by = 0; //TODO
 };
 
 //fnid -> number of calls
@@ -55,8 +56,8 @@ std::unordered_map<uint64_t, int> calls;
 //call_id -> CallInfo
 std::unordered_map<uint64_t, CallInfo> call_infos; 
 
-callstack_stack_entry getCurrentEntry(CPUState *cpu){
-    callstack_stack_entry entry;
+CallstackStackEntry getCurrentEntry(CPUState *cpu){
+    CallstackStackEntry entry;
     int entries_n = get_call_entries(&entry, 1,cpu);
     assert(entries_n);
     return entry;
@@ -71,11 +72,14 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         return;
     }
 
+    CallstackStackEntry current_entry = getCurrentEntry(cpu);
+
     if(calls[entrypoint] < 5) {
         // create a call_info for this call, successive memory callbacks 
         // will populate its writeset and readset
         calls[entrypoint]++;
         call_infos[callid].program_counter = entrypoint;
+        call_infos[callid].called_by = current_entry.call_id;
     }
 }
 
@@ -89,7 +93,7 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         return 0;
     }
 
-    callstack_stack_entry entry = getCurrentEntry(cpu);
+    CallstackStackEntry entry = getCurrentEntry(cpu);
     
     if( call_infos.count(entry.call_id)){
         for(target_ulong i=0; i < size; i++){
@@ -109,7 +113,7 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         return 0;
     }
 
-    callstack_stack_entry entry = getCurrentEntry(cpu);
+    CallstackStackEntry entry = getCurrentEntry(cpu);
     
     if( call_infos.count(entry.call_id)){
  
@@ -211,7 +215,7 @@ void on_ret(CPUState *cpu, target_ulong entrypoint, uint64_t callid, uint32_t sk
     for(const bufferinfo& rdb : readbuffs){
         std::cout << rdb.toString();
     }
-    std::cout << std::endl;
+    std::cout << " called_by=" << call.called_by << std::endl;
 
     call_infos.erase(callid);
 }

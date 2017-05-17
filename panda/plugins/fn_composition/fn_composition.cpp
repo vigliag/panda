@@ -166,7 +166,7 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         return 0;
     }
 
-    callstack_stack_entry entry;
+    CallstackStackEntry entry;
     int entries_n = get_call_entries(&entry, 1,cpu);
     assert(entries_n);
     
@@ -192,7 +192,7 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size) {
     //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
     
-    callstack_stack_entry entry;
+    CallstackStackEntry entry;
     int entries_n = get_call_entries(&entry, 1,cpu);
     assert(entries_n);
     

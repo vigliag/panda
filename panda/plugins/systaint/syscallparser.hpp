@@ -9,6 +9,10 @@ struct Syscall {
     std::string name;
     std::string retval;
     std::vector<std::string> argDefs;
+
+    std::size_t paramSize() const{
+        return argDefs.size() * 4;
+    }
 };
 
 boost::optional<Syscall> parsePrototype(const std::string& prototype);

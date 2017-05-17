@@ -1,0 +1,13 @@
+message EncFnRead {
+   required uint32 address = 1;
+   required uint32 value = 2;
+   repeated uint32 dependencies = 3;
+}
+
+message EncFnCall {
+   required uint32 entrypoint = 1;
+   required uint32 callid = 2;
+   repeated EncFnRead reads = 3;
+}
+
+optional EncFnCall encfncall = 57;

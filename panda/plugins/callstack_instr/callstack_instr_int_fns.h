@@ -22,6 +22,6 @@ Panda__CallStack *pandalog_callstack_create(void);
 // free that data structure
 void pandalog_callstack_free(Panda__CallStack *cs);
 
-int get_call_entries(callstack_stack_entry* entries, int n, CPUState *cpu);
+int get_call_entries(CallstackStackEntry* entries, int n, CPUState *cpu);
 
 #endif
