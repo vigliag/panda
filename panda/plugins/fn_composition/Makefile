@@ -2,7 +2,7 @@
 
 # If you need custom CFLAGS or LIBS, set them up here
 # QEMU_CXXFLAGS+= $(LLVM_CXXFLAGS)
-CFLAGS+= -g -I/usr/lib/llvm-3.3/include
+CFLAGS+= -I/home/vigliag/software/llvm3/llvm/include -g
 LIBS+=
 
 # The main rule for your plugin. List all object-file dependencies.

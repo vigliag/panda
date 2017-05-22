@@ -14,10 +14,10 @@ TAINT_OP_CFLAGS = -O3 -std=c11 -Wno-typedef-redefinition -fno-stack-protector
 TAINT_OP_CFLAGS+= -fno-omit-frame-pointer -Wno-type-limits -stdlib=libc++ -x c++
 TAINT_OP_CFLAGS+= $(CLANG_CXXFLAGS) $(DBGFLAGS)
 
-TAINT_OP_FILTER = -g -Wold-style-declaration -std=c11 -fpermissive
+TAINT_OP_FILTER = -g -Wold-style-declaration -std=c11 -fpermissive -Wno-shift-negative-value
 TAINT_OP_FILTER+= -fstack-protector-strong -Wno-error=cpp -mcx16
 
-$(info $$LIBS is [${LIBS}])
+#$(info $$LIBS is [${LIBS}])
 
 $(PLUGIN_TARGET_DIR)/panda_taint2.so: \
     $(PLUGIN_OBJ_DIR)/shad_dir_32.o \
