@@ -15,7 +15,14 @@ PANDAENDCOMMENT */
 
 #include <iostream>
 #include <vector>
-#include <regex>
+#include <boost/regex.hpp>
+#include <exception>
+
+namespace boost {
+    void throw_exception(std::exception const & e){
+        std::cerr << "BOOSTEXCEPTION " << e.what() << std::endl;
+    }
+}
 
 #include <llvm/ExecutionEngine/ExecutionEngine.h>
 #include <llvm/Support/raw_ostream.h>
@@ -1113,14 +1120,14 @@ void PandaTaintVisitor::visitMemSetInst(MemSetInst &I) {
     inlineCallAfter(I, hostDeleteF, args);
 }
 
-static const std::regex mathRegex(
+static const boost::regex mathRegex(
     "sin|cos|tan|log|__isinf|__isnan|rint|floor|abs|fabs|ceil|exp2",
-    std::regex::egrep);
-static const std::regex ldRegex("helper_(ret|be|le)_ld[us]?[bwlq]_mmu(_panda)?",
-        std::regex::egrep);
-static const std::regex stRegex("helper_(ret|be|le)_st[us]?[bwlq]_mmu(_panda)?",
-        std::regex::egrep);
-static const std::regex inoutRegex("helper_(in|out)[bwlq]", std::regex::egrep);
+    boost::regex::egrep);
+static const boost::regex ldRegex("helper_(ret|be|le)_ld[us]?[bwlq]_mmu(_panda)?",
+        boost::regex::egrep);
+static const boost::regex stRegex("helper_(ret|be|le)_st[us]?[bwlq]_mmu(_panda)?",
+        boost::regex::egrep);
+static const boost::regex inoutRegex("helper_(in|out)[bwlq]", boost::regex::egrep);
 void PandaTaintVisitor::visitCallInst(CallInst &I) {
     LLVMContext &ctx = I.getContext();
     Function *calledF = I.getCalledFunction();
@@ -1171,7 +1178,7 @@ void PandaTaintVisitor::visitCallInst(CallInst &I) {
             return;
         } else if (calledName == "cpu_loop_exit") {
             return;
-        } else if (std::regex_match(calledName, ldRegex)) {
+        } else if (boost::regex_match(calledName, ldRegex)) {
             Value *ptr = I.getArgOperand(1);
             if (tainted_pointer && !isa<Constant>(ptr)) {
                 insertTaintPointer(I, ptr, &I, false);
@@ -1179,7 +1186,7 @@ void PandaTaintVisitor::visitCallInst(CallInst &I) {
                 insertTaintCopy(I, llvConst, &I, memConst, NULL, getValueSize(&I));
             }
             return;
-        } else if (std::regex_match(calledName, stRegex)) {
+        } else if (boost::regex_match(calledName, stRegex)) {
             Value *ptr = I.getArgOperand(1);
             Value *val = I.getArgOperand(2);
             if (tainted_pointer && !isa<Constant>(ptr)) {
@@ -1190,13 +1197,13 @@ void PandaTaintVisitor::visitCallInst(CallInst &I) {
                 insertTaintCopy(I, memConst, NULL, llvConst, val, getValueSize(val));
             }
             return;
-        } else if (std::regex_match(calledName, mathRegex)) {
+        } else if (boost::regex_match(calledName, mathRegex)) {
             insertTaintMix(I, I.getArgOperand(0));
             return;
         } else if (calledName == "ldexp" || calledName == "atan2") {
             insertTaintCompute(I, I.getArgOperand(0), I.getArgOperand(1), true);
             return;
-        } else if (std::regex_match(calledName, inoutRegex)) {
+        } else if (boost::regex_match(calledName, inoutRegex)) {
             return;
         }
         // Else fall through to named case.

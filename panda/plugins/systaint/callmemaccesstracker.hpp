@@ -17,13 +17,15 @@ public:
     }
 
     void read(uint32_t addr, uint8_t data){
-        if(writeset.count(addr)){
+        if(writeset.count(addr) == 0 && readset.count(addr)==0){
             readset[addr] = data;
         }
     }
 
     void readdep(uint32_t addr, uint32_t dependency){
-        readsetDeps[addr].insert(dependency);
+        if(writeset.count(addr) == 0){
+            readsetDeps[addr].insert(dependency);
+        }
     }
 
     void write(uint32_t addr, uint8_t data){

@@ -1,5 +1,6 @@
 # Include files and lib from LLVM
 QEMU_CXXFLAGS+= $(LLVM_CXXFLAGS)
+LIBS+= -lboost_regex
 
 DBGFLAGS=
 DBGFLAGS+= #-DTAINTDEBUG
@@ -15,6 +16,8 @@ TAINT_OP_CFLAGS+= $(CLANG_CXXFLAGS) $(DBGFLAGS)
 
 TAINT_OP_FILTER = -g -Wold-style-declaration -std=c11 -fpermissive
 TAINT_OP_FILTER+= -fstack-protector-strong -Wno-error=cpp -mcx16
+
+$(info $$LIBS is [${LIBS}])
 
 $(PLUGIN_TARGET_DIR)/panda_taint2.so: \
     $(PLUGIN_OBJ_DIR)/shad_dir_32.o \

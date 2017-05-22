@@ -1,13 +1,14 @@
-message EncFnRead {
+message SysMemoryLocation {
    required uint32 address = 1;
    required uint32 value = 2;
    repeated uint32 dependencies = 3;
 }
 
-message EncFnCall {
+message SysFnCall {
    required uint32 entrypoint = 1;
    required uint32 callid = 2;
-   repeated EncFnRead reads = 3;
+   repeated SysMemoryLocation reads = 3;
+   repeated SysMemoryLocation writes = 4;
 }
 
-optional EncFnCall encfncall = 57;
+optional SysFnCall encfncall = 57;
