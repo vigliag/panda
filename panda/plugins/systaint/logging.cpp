@@ -100,5 +100,5 @@ void logSysFnCall(uint64_t callid, uint64_t entrypoint, CallMemAccessTracker& cm
     delete[] writes;
     delete[] writePtrs;
 
-    fprintf(stderr, "Logged thing \n");
+    fprintf(stderr, "Logged %lu, %lu \n", callid, entrypoint);
 }

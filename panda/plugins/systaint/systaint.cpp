@@ -88,7 +88,7 @@ bool isUserSpaceAddress(uint64_t virt_addr){
 
 /* Used as a callback to add new_label as a dependency to this_label
    uses global data structures */
-int dependencyAdder(uint32_t dependency, void *current_event_){
+int eventDependencyAdder(uint32_t dependency, void *current_event_){
     uint32_t current_event = *(uint32_t*) current_event_;
 
     if(dependency != current_event){
@@ -112,7 +112,7 @@ int addEventDeps(CPUState* cpu, target_ulong addr, target_ulong size, uint32_t d
 
     cout << "reading taint " << addr << "[" << size << "], adding dep to " << dependent << endl;
     for(uint64_t i=0; i< size; i++){
-        taint2_labelset_ram_iter(abs_addr + i, dependencyAdder, &dependent);
+        taint2_labelset_ram_iter(abs_addr + i, eventDependencyAdder, &dependent);
     }
 
     return 1;
@@ -208,7 +208,7 @@ void onSysEnter(CPUState *cpu, target_ulong pc, const Syscall& sc){
         taint2_delete_ram(arg_start_pa + i);
         taint2_label_ram(arg_start_pa + i, taint_label);
     }*/
-    cout << "done" << endl;
+    //cout << "done" << endl;
 }
 
 
@@ -249,7 +249,7 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
     } else {
         // we ignore nested events (such as nested syscalls)
         // as the topmost one should give us the most information
-        cout << "EVENT ignored " << event_label << " instcount " <<  rr_get_guest_instr_count()<< endl;
+        cout << "EVENT ignored " << event_label << " instcount " <<  rr_get_guest_instr_count()<< " current " << current_event << endl;
     }
 
     // Start tracking this process if not doing it already
@@ -267,15 +267,33 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
 
 void systaint_event_exit(CPUState *cpu, uint32_t event_label){
     assert(event_label);
+    assert(tracked_asid == panda_current_asid(cpu));
+
     if(current_event && event_label == current_event){
         cout << "EVENT exit " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
+
+        //labeling
+        for(const auto& addr_data: current_event_memtracker.writeset){
+            uint64_t write_pa = panda_virt_to_phys(cpu, addr_data.first);
+
+            if(write_pa == -1){
+                cout << "ERROR panda_virt_to_phys errored while labeling " << addr_data.first << " with " << event_label << endl;
+            } else {
+                taint2_label_ram(write_pa, current_event);
+            }
+        }
+
+        //logging
         logSysFnCall(current_event, 0, current_event_memtracker, outfp);
+
+        //resetting memtracker and event
         current_event_memtracker.clear();
         current_event = 0;
+
     } else if(current_event) {
         cout << "EVENT ignored_exit " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
     } else {
-        cerr << "WARNING exit from unexpected event" << " instcount " <<  rr_get_guest_instr_count() << endl;
+        cerr << "WARNING exit from unexpected event " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
     }
 }
 
@@ -354,10 +372,21 @@ void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
         return;
     }
 
-    current_encoding_call_ = 0;
+    // The current encoding call is returning
+    // label its data
+    for(const auto& addr_data: current_call_memtracker.writeset){
+        uint64_t write_pa = panda_virt_to_phys(cpu, addr_data.first);
+
+        if(write_pa == -1){
+            cout << "ERROR panda_virt_to_phys errored while labeling " << addr_data.first << " with " << callid << endl;
+        } else {
+            taint2_label_ram(write_pa, current_event);
+        }
+    }
 
     logSysFnCall(callid, entrypoint, current_call_memtracker, outfp);
     current_call_memtracker.clear();
+    current_encoding_call_ = 0;
 }
 
 
@@ -367,6 +396,7 @@ void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
 
 int readsetDependencyAdder(uint32_t dependency, void *memaddress_){
     uint32_t memaddress = *(uint32_t*) memaddress_;
+    printf("adding dependency %u to %u \n", dependency, memaddress);
     current_call_memtracker.readdep(memaddress, dependency);
     return 0;
 }
@@ -411,9 +441,10 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         for(target_ulong i=0; i<size; i++){
             current_event_memtracker.write(addr+i, data[i]);
 
+            /* Can't apply taint here, as it would be immediately cleared by the taint instrumentation right after
             if(taint2_enabled()){
                 taint2_label_ram(addr_pa + i, current_event);
-            }
+            }*/
         }
     }
 
@@ -424,8 +455,10 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         for(target_ulong i=0; i<size; i++){
             current_call_memtracker.write(addr+i, data[i]);
 
+            /* Can't apply taint here, as it would be immediately cleared by the taint instrumentation right after
             if(taint2_enabled())
                 taint2_label_ram(addr_pa + i, curr_encoding_call);
+            }*/
         }
     }
     
@@ -457,6 +490,7 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     if(current_encoding_function && current_event){
         cerr << "WARNING, both current_encoding_function and current_event are set" << endl;
     }
+
     if(current_encoding_function){
         cout << "CURRENT ENCODING FN READ" << endl;
 
@@ -473,6 +507,15 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 }
 
 #endif // TARGET_I386
+
+FILE* taintchanges = nullptr;
+
+void on_taint_change (Addr ma, uint64_t size){
+    (void)size;
+    if(ma.typ == MADDR){
+        fprintf(taintchanges, "%p %u\n", (void*)ma.val.ma, taint2_query_ram(ma.val.ma));
+    };
+}
 
 void *plugin_self;
 
@@ -507,6 +550,7 @@ bool init_plugin(void *self) {
 
     PPP_REG_CB("callstack_instr", on_call2, on_call);
     PPP_REG_CB("callstack_instr", on_ret2, on_return);
+    PPP_REG_CB("taint2", on_taint_change, on_taint_change);
 
     panda_arg_list *args = panda_get_args("systaint");
     if (args != NULL) {
@@ -519,6 +563,9 @@ bool init_plugin(void *self) {
     if(outfile){
         outfp = fopen(outfile, "w");
     }
+
+    taintchanges = fopen("/tmp/taintchanges.log", "w");
+    assert(taintchanges);
 
     if(tracked_encoding_fn){
         cout << "tracking encfn " << tracked_encoding_fn << endl;
