@@ -41,9 +41,6 @@ void logSysFnCall(uint64_t callid, uint64_t entrypoint, CallMemAccessTracker& cm
     int i = 0;
     for(const auto& addr_value :cmt.readset){
         const auto& deps = cmt.readsetDeps[addr_value.first];
-        if(deps.size() > 1){
-            fprintf(stderr, "depsize %lu \n", deps.size());
-        }
 
         reads[i] = PANDA__SYS_MEMORY_LOCATION__INIT;
         reads[i].n_dependencies = deps.size();

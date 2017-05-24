@@ -1,6 +1,8 @@
 #include "panda/plugin.h" //include plugin api we are implementing
 #include "taint2/taint2.h" //include taint2 module we'll use
 #include "callstack_instr/callstack_instr.h"
+#include "sysevent/sysevent.h"
+#include "syscall_listener.hpp"
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
@@ -16,14 +18,10 @@ void uninit_plugin(void *);
 int guest_hypercall_callback(CPUState *cpu);
 }
 
-#define HYPERCALL_SYSCALL_ENTER 1
-#define HYPERCALL_SYSCALL_EXIT 2
-#define SYSTAINT_MAGIC 0xffaaffcc
-
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <fstream>
+
 #include <map>
 #include <set>
 #include <unordered_set>
@@ -32,29 +30,8 @@ int guest_hypercall_callback(CPUState *cpu);
 
 using namespace std;
 
-#include "syscallparser.hpp"
 #include "callmemaccesstracker.hpp"
 #include "logging.hpp"
-
-/* Data structures */
-
-// parsed syscall definitions
-static std::vector<Syscall> syscalls;
-
-/** Parses syscall definitions, called on plugin init */
-void parseSyscallDefs(const std::string& prototypesFilename){
-    std::ifstream infile(prototypesFilename);
-    std::string line;
-
-    while (std::getline(infile, line))
-    {
-        //cout << "parsing " << line << endl;
-        auto parsedSyscall = parsePrototype(line);
-        if(parsedSyscall){
-            syscalls.push_back(*parsedSyscall);
-        }
-    }
-}
 
 // Dependency tree we are going to build
 using dependencySet = std::unordered_set<uint32_t>;
@@ -64,21 +41,14 @@ static std::map<uint32_t, dependencySet> eventDependencies;
 #ifdef TARGET_I386
 
 uint32_t current_syscall = 0;
+uint32_t tracked_asid = 0;
+
 static uint32_t current_event = 0;
-static uint32_t tracked_asid = 0;
 static uint32_t tracked_encoding_fn = 0;
 static bool no_llvm = false;
 static const char* outfile = nullptr;
 static FILE* outfp = nullptr;
 CallMemAccessTracker current_event_memtracker;
-
-// counters have an idea of how many read and writes we are talking about
-static int n_mem_writes_to_taint = 0;
-static int n_mem_reads_to_query = 0;
-#endif
-
-
-#ifdef TARGET_I386
 
 /* On windows, checks if a virtual address is in user-space */
 bool isUserSpaceAddress(uint64_t virt_addr){
@@ -88,20 +58,25 @@ bool isUserSpaceAddress(uint64_t virt_addr){
 
 /* Used as a callback to add new_label as a dependency to this_label
    uses global data structures */
-int eventDependencyAdder(uint32_t dependency, void *current_event_){
-    uint32_t current_event = *(uint32_t*) current_event_;
+int currentEventDependencyAdder(uint32_t dependency, void *address){
+    target_ulong addr = *(target_ulong*) address;
 
-    if(dependency != current_event){
-        if(eventDependencies[current_event].count(dependency) == 0){
-            printf("adding dependency %u -> %u \n", dependency, current_event);
-            eventDependencies[current_event].insert(dependency);
-        }
+    if(dependency == current_event){
+        return 0;
     }
 
+    if (eventDependencies[current_event].count(dependency) == 0){
+        printf("adding dependency %u -> %u \n", dependency, current_event);
+        eventDependencies[current_event].insert(dependency);
+    }
+
+    current_event_memtracker.readdep(addr, dependency);
     return 0;
 }
 
-int addEventDeps(CPUState* cpu, target_ulong addr, target_ulong size, uint32_t dependent){
+using taint2_iter_callback = int (*)(uint32_t, void*);
+
+int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, taint2_iter_callback callback){
     if(!taint2_enabled()) return 0;
 
     uint64_t abs_addr = panda_virt_to_phys(cpu, addr);
@@ -110,48 +85,12 @@ int addEventDeps(CPUState* cpu, target_ulong addr, target_ulong size, uint32_t d
         return 0;
     }
 
-    cout << "reading taint " << addr << "[" << size << "], adding dep to " << dependent << endl;
     for(uint64_t i=0; i< size; i++){
-        taint2_labelset_ram_iter(abs_addr + i, eventDependencyAdder, &dependent);
+        uint32_t this_addr = addr + i;
+        taint2_labelset_ram_iter(abs_addr + i, callback, &this_addr);
     }
 
     return 1;
-}
-
-
-// A SyscallPCpoint is added when a sysenter is translated, so that we can then recognize it when the sysenter actually happens
-static std::set<std::pair <target_ulong, target_ulong>> syscallPCpoints;
-
-
-/* When an instruction is being translated, check if it's a sysenter, if it is
-   add the target pc to syscallPCpoints. This code is copied from syscall2 */
-bool translate_callback(CPUState *cpu, target_ulong pc) {
-#ifdef TARGET_I386
-    if(tracked_asid != panda_current_asid(cpu))
-        return false;
-
-    unsigned char buf[2] = {};
-    panda_virtual_memory_rw(cpu, pc, buf, 2, 0);
-    // Check if the instruction is syscall (0F 05)
-    if (buf[0]== 0x0F && buf[1] == 0x05) {
-        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
-        return true;
-    }
-    // Check if the instruction is int 0x80 (CD 80)
-    else if (buf[0]== 0xCD && buf[1] == 0x80) {
-        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
-        return true;
-    }
-    // Check if the instruction is sysenter (0F 34)
-    else if (buf[0]== 0x0F && buf[1] == 0x34) {
-        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
-        return true;
-    }
-    else {
-        return false;
-    }
-#endif
-return false;
 }
 
 
@@ -171,7 +110,7 @@ void onSysEnter(CPUState *cpu, target_ulong pc, const Syscall& sc){
         // TODO generate a new event instead, then pandalog events
     }
     
-    uint32_t taint_label = current_event != 0 ? current_event : sc.callno;
+    //uint32_t taint_label = current_event != 0 ? current_event : sc.callno;
 
     //take size and location of syscall parameters
     //regs[R_EDX] + 8 points to the start of the syscall parameters
@@ -186,8 +125,8 @@ void onSysEnter(CPUState *cpu, target_ulong pc, const Syscall& sc){
 
     /* Read taint for syscall args, the current event depends on the ones who
     tainted the arguments of the current syscall */
-    cout << "Reading taint from " << arg_start << " to " << arg_start + arg_len << endl;
-    addEventDeps(cpu, arg_start, arg_len, taint_label);
+    cout << "Reading taint from " << arg_start << " to " << arg_start + arg_len << " from event " << current_event << endl;
+    readLabels(cpu, arg_start, arg_len, currentEventDependencyAdder);
     cout << "done" << endl;
 
     // TODO taint EAX on sysExit (not required on windows, as return values are error messages)
@@ -209,32 +148,6 @@ void onSysEnter(CPUState *cpu, target_ulong pc, const Syscall& sc){
         taint2_label_ram(arg_start_pa + i, taint_label);
     }*/
     //cout << "done" << endl;
-}
-
-
-/* When we execute an instruction (for which translate_callback returned true),
-we check if it was the Sysenter we saw before */
-int exec_callback(CPUState *cpu, target_ulong pc) {
-    auto current_asid = panda_current_asid(cpu);
-
-    if (!syscallPCpoints.count(std::make_pair(pc,current_asid))){
-        return 0;
-    }
-
-    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
-
-    // Retrieve the syscall definition or return
-    // (there are currently several nondefined syscalls which we ignore)
-    uint32_t syscall_no = env->regs[R_EAX];
-
-    if(syscall_no >= syscalls.size()){
-        cout << "Sysenter, no: " << syscall_no << "ignored" << endl ;
-        return 0;
-    }
-
-    onSysEnter(cpu, pc, syscalls[syscall_no]);
-
-    return 0;
 }
 
 
@@ -297,40 +210,6 @@ void systaint_event_exit(CPUState *cpu, uint32_t event_label){
     }
 }
 
-void hypercall_event_listener(CPUState *cpu){
-    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
-    
-    if(env->regs[R_EAX] != SYSTAINT_MAGIC)
-        return;
-
-    //printf("HYPERCALL " TARGET_FMT_ld " " TARGET_FMT_ld " " TARGET_FMT_ld "\n",
-    //     env->regs[R_EBX], env->regs[R_ECX], env->regs[R_EDX]);
-
-
-    bool entering = env->regs[R_EBX] == HYPERCALL_SYSCALL_ENTER ? true : false;
-    uint32_t cuckoo_event = env->regs[R_ECX];
-
-    if(entering){
-        printf("SYSCALL enter: %" PRIu32 " \n", cuckoo_event);
-        systaint_event_enter(cpu, cuckoo_event);
-    }
-
-    if(!entering){
-        printf("SYSCALL exit: %" PRIu32 " \n", cuckoo_event);
-        systaint_event_exit(cpu, cuckoo_event);
-    }
-}
-
-int guest_hypercall_callback(CPUState *cpu){
-#ifdef TARGET_I386
-    hypercall_event_listener(cpu);
-#endif
-
-#ifdef TARGET_ARM
-    // TODO
-#endif
-    return 1;
-}
 
 // ======================== 
 // Encoding function calls handling
@@ -380,7 +259,7 @@ void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
         if(write_pa == -1){
             cout << "ERROR panda_virt_to_phys errored while labeling " << addr_data.first << " with " << callid << endl;
         } else {
-            taint2_label_ram(write_pa, current_event);
+            taint2_label_ram(write_pa, current_encoding_call_);
         }
     }
 
@@ -394,28 +273,20 @@ void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
 // Memory access tracking 
 // ========================
 
-int readsetDependencyAdder(uint32_t dependency, void *memaddress_){
-    uint32_t memaddress = *(uint32_t*) memaddress_;
-    printf("adding dependency %u to %u \n", dependency, memaddress);
-    current_call_memtracker.readdep(memaddress, dependency);
-    return 0;
-}
+int currentEncodingCallDependencyAdder(uint32_t dependency, void *addressp){
+    target_ulong addr = *(target_ulong*) addressp;
 
-int addCurrentEncFnCallMemAddressDeps(CPUState* cpu, target_ulong addr, target_ulong size){
-    if(!taint2_enabled()) return 0;
-
-    uint64_t ptr = panda_virt_to_phys(cpu, addr);
-    if(ptr == static_cast<uint64_t>(-1)){
-        cerr << "panda_virt_to_phys " << addr << " errored" << endl;
+    if(dependency == current_encoding_call_){
         return 0;
     }
 
-    for(uint64_t i=0; i< size; i++){
-        uint32_t this_addr = addr + i;
-        taint2_labelset_ram_iter(ptr + i, readsetDependencyAdder, &this_addr);
+    if (eventDependencies[current_encoding_call_].count(dependency) == 0){
+        printf("adding dependency %u -> %u \n", dependency, current_encoding_call_);
+        eventDependencies[current_encoding_call_].insert(dependency);
     }
 
-    return 1;
+    current_call_memtracker.readdep(addr, dependency);
+    return 0;
 }
 
 int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
@@ -437,14 +308,8 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     pointers given as arguments. Let's try with this enabled anyway */
 
     if(current_event){
-        //cout << "WRITE-LABELING " << addr << " [" <<  size << " ] with " << current_event << endl;
         for(target_ulong i=0; i<size; i++){
             current_event_memtracker.write(addr+i, data[i]);
-
-            /* Can't apply taint here, as it would be immediately cleared by the taint instrumentation right after
-            if(taint2_enabled()){
-                taint2_label_ram(addr_pa + i, current_event);
-            }*/
         }
     }
 
@@ -454,19 +319,12 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
         for(target_ulong i=0; i<size; i++){
             current_call_memtracker.write(addr+i, data[i]);
-
-            /* Can't apply taint here, as it would be immediately cleared by the taint instrumentation right after
-            if(taint2_enabled())
-                taint2_label_ram(addr_pa + i, curr_encoding_call);
-            }*/
         }
     }
     
     return 0;
 }
 
-
-// TODO substitute me with taint-changed, should be faster (less queries)
 int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
@@ -481,7 +339,7 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         for(target_ulong i=0; i< size; i++){
             current_event_memtracker.read(addr +i ,  data[i]);
         }
-        addEventDeps(cpu, addr, size, current_event);
+        readLabels(cpu, addr, size, currentEventDependencyAdder);
     }
 
     // If there's an encoding call currently executing, track its reads to find dependecies
@@ -494,13 +352,11 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     if(current_encoding_function){
         cout << "CURRENT ENCODING FN READ" << endl;
 
-        addEventDeps(cpu, addr, size, current_encoding_function);
-
         for(uint64_t i=0; i< size; i++){
             current_call_memtracker.read(addr + i, data[i]);
         }
 
-        addCurrentEncFnCallMemAddressDeps(cpu, addr, size);
+        readLabels(cpu, addr, size, currentEncodingCallDependencyAdder);
     }
 
     return 0;
@@ -524,8 +380,6 @@ bool init_plugin(void *self) {
 #ifdef TARGET_I386
     plugin_self = self;
     panda_cb pcb;
-    pcb.guest_hypercall = guest_hypercall_callback;
-    panda_register_callback(self, PANDA_CB_GUEST_HYPERCALL, pcb);
 
     panda_enable_memcb();
 
@@ -540,17 +394,23 @@ bool init_plugin(void *self) {
 
     panda_require("taint2");
     assert(init_taint2_api());
+    PPP_REG_CB("taint2", on_taint_change, on_taint_change);
+
+    taintchanges = fopen("/tmp/taintchanges.log", "w");
+    assert(taintchanges);
 
     panda_require("callstack_instr");
     assert(init_callstack_instr_api());
 
     string fname = "/Panda/panda_repo/panda/plugins/syscalls2/windows7_x86_prototypes.txt";
     parseSyscallDefs(fname);
-    cout << "parsed " << syscalls.size() << " syscalls" << endl;
 
     PPP_REG_CB("callstack_instr", on_call2, on_call);
     PPP_REG_CB("callstack_instr", on_ret2, on_return);
-    PPP_REG_CB("taint2", on_taint_change, on_taint_change);
+
+    panda_require("sysevent");
+    PPP_REG_CB("sysevent", on_sysevent_enter, systaint_event_enter);
+    PPP_REG_CB("sysevent", on_sysevent_exit, systaint_event_exit);
 
     panda_arg_list *args = panda_get_args("systaint");
     if (args != NULL) {
@@ -563,9 +423,6 @@ bool init_plugin(void *self) {
     if(outfile){
         outfp = fopen(outfile, "w");
     }
-
-    taintchanges = fopen("/tmp/taintchanges.log", "w");
-    assert(taintchanges);
 
     if(tracked_encoding_fn){
         cout << "tracking encfn " << tracked_encoding_fn << endl;
@@ -592,8 +449,6 @@ void printOutDeps(){
 void uninit_plugin(void *self) {
     #ifdef TARGET_I386
 
-    printf("un_initing systaint, reads %d, writes %d",
-        n_mem_reads_to_query, n_mem_writes_to_taint);
     printOutDeps();
 
     if(outfp){
