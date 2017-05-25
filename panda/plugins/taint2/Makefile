@@ -1,6 +1,6 @@
 # Include files and lib from LLVM
 QEMU_CXXFLAGS+= $(LLVM_CXXFLAGS)
-LIBS+= -lboost_regex
+LIBS+=
 
 DBGFLAGS=
 #DBGFLAGS+= -DTAINTDEBUG

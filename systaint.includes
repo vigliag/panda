@@ -224,7 +224,6 @@ ui
 panda/plugins/systaint
 /usr/include/glib-2.0/
 /usr/lib/x86_64-linux-gnu/glib-2.0/include/
-/usr/include/llvm-3.3/
 panda/plugins/cskeleton
 panda/plugins/fn_composition
 panda/plugins/replaymovie
@@ -249,3 +248,4 @@ panda/plugins/taint2/tests/full_system/memory
 panda/plugins/fn_memlogger
 panda/plugins/taint2/tests/full_system/network/query_receive
 panda/plugins/syscalls_r
+/home/vigliag/software/llvm3/llvm/include/

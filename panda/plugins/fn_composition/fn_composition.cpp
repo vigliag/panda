@@ -168,7 +168,10 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
     CallstackStackEntry entry;
     int entries_n = get_call_entries(&entry, 1,cpu);
-    assert(entries_n);
+    if(entries_n == 0){
+        cerr << "no callstack entries" << endl;
+        return 0;
+    }
     
     if( call_infos.count(entry.call_id)){
         // if the call is already being logged, log this write
@@ -194,7 +197,10 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     
     CallstackStackEntry entry;
     int entries_n = get_call_entries(&entry, 1,cpu);
-    assert(entries_n);
+    if(entries_n == 0){
+        cerr << "no callstack entries" << endl;
+        return 0;
+    }
     
     if( call_infos.count(entry.call_id)){
         // if the call is already being logged, log this access

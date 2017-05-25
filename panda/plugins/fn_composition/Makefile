@@ -1,8 +1,8 @@
 # Don't forget to add your plugin to config.panda
 
 # If you need custom CFLAGS or LIBS, set them up here
-# QEMU_CXXFLAGS+= $(LLVM_CXXFLAGS)
-CFLAGS+= -I/home/vigliag/software/llvm3/llvm/include -g
+QEMU_CXXFLAGS+= $(LLVM_CXXFLAGS) -Wno-type-limits -Wno-cast-qual
+#CFLAGS+= -I/home/vigliag/software/llvm3/llvm/include -g
 LIBS+=
 
 # The main rule for your plugin. List all object-file dependencies.

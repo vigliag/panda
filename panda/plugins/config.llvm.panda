@@ -7,3 +7,4 @@ tstringsearch
 tainted_instr
 systaint
 fn_composition
+llvm_trace

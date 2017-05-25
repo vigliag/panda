@@ -16,7 +16,7 @@ PANDAENDCOMMENT */
 #include "panda_dynval_inst.h"
 #include "panda_memlog.h"
 extern "C" {
-#include "config.h"
+//#include "config.h"
 }
 
 using namespace llvm;

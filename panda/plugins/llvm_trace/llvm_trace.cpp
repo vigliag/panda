@@ -33,14 +33,11 @@ PANDAENDCOMMENT */
 #define __STDC_FORMAT_MACROS
 #endif
 
-extern "C" {
-#include "panda_plugin.h"
-#include "panda_common.h"
-#include "tubtf.h"
+#include "panda/plugin.h"
+#include "panda/common.h"
 
-#ifndef CONFIG_SOFTMMU
-#include "syscall_defs.h"
-#endif
+extern "C" {
+#include "tubtf.h"
 }
 
 #include "panda_memlog.h"
@@ -50,7 +47,7 @@ extern "C" {
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 
 #include "panda_dynval_inst.h"
-#include "tcg-llvm.h"
+#include "panda/tcg-llvm.h"
 
 
 // These need to be extern "C" so that the ABI is compatible with
@@ -83,7 +80,7 @@ extern FILE *memlog;
 
 }
 
-int tubtf_on;
+extern int tubtf_on;
 
 // Instrumentation function pass
 llvm::PandaInstrFunctionPass *PIFP;
@@ -162,8 +159,7 @@ int before_block_exec(CPUState *env, TranslationBlock *tb){
     return 0;
 }
 
-int after_block_exec(CPUState *env, TranslationBlock *tb,
-        TranslationBlock *next_tb){
+int after_block_exec(CPUState *env, TranslationBlock *tb){
   if (tubtf_on == 0) {
     // flush dynlog to file
     assert(memlog);
@@ -317,10 +313,10 @@ bool init_plugin(void *self) {
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
     pcb.after_block_exec = after_block_exec;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
-    pcb.phys_mem_read = phys_mem_read_callback;
-    panda_register_callback(self, PANDA_CB_PHYS_MEM_READ, pcb);
-    pcb.phys_mem_write = phys_mem_write_callback;
-    panda_register_callback(self, PANDA_CB_PHYS_MEM_WRITE, pcb);
+    pcb.phys_mem_after_read = phys_mem_read_callback;
+    panda_register_callback(self, PANDA_CB_PHYS_MEM_AFTER_READ, pcb);
+    pcb.phys_mem_after_write = phys_mem_write_callback;
+    panda_register_callback(self, PANDA_CB_PHYS_MEM_AFTER_WRITE, pcb);
     pcb.cb_cpu_restore_state = cb_cpu_restore_state;
     panda_register_callback(self, PANDA_CB_CPU_RESTORE_STATE, pcb);
 
