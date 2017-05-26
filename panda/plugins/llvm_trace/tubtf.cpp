@@ -5,7 +5,6 @@
 #include "tubtf.h"
 
 // yes, this is a global.  I assume you only want one trace.
-int tubtf_on = 0;
 TubtfTrace *tubtf=NULL;
 
 

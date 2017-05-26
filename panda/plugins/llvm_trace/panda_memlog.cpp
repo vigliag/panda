@@ -33,7 +33,7 @@ extern TubtfTrace *tubtf;
 
 // if this is 1 then we log tubtf style
 // otherwise the DynvalEntry struct is just blitted to file
-extern int tubtf_on;
+int use_tubtf_format;
 
 FILE *memlog;
 
@@ -207,7 +207,7 @@ void delete_dynval_buffer(DynValBuffer *dynval_buf){
 
 
 void write_dynval_buffer(DynValBuffer *dynval_buf, DynValEntry *entry){
-    if (tubtf_on) {
+    if (use_tubtf_format) {
         // XXX Fixme: note that when using tubt format, we still create that DynValBuffer.  Waste of memory
         uint64_t cr3, pc, typ;
         uint64_t arg1, arg2, arg3, arg4;
@@ -336,7 +336,7 @@ void write_dynval_buffer(DynValBuffer *dynval_buf, DynValEntry *entry){
 
 
 void read_dynval_buffer(DynValBuffer *dynval_buf, DynValEntry *entry){
-    assert (tubtf_on == 0);
+    assert (use_tubtf_format == 0);
 #ifndef NDEBUG
     uint32_t bytes_used = dynval_buf->ptr - dynval_buf->start;
     assert(dynval_buf->max_size - bytes_used >= sizeof(DynValEntry));

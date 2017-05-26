@@ -80,7 +80,8 @@ extern FILE *memlog;
 
 }
 
-extern int tubtf_on;
+extern int use_tubtf_format;
+static int llvm_trace_on = false;
 
 // Instrumentation function pass
 llvm::PandaInstrFunctionPass *PIFP;
@@ -91,6 +92,8 @@ llvm::PandaInstrFunctionPass *PIFP;
  */
 int phys_mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
+    if(!llvm_trace_on) return 0;
+
     DynValBuffer *dynval_buffer = PIFP->PIV->getDynvalBuffer();
     log_dynval(dynval_buffer, ADDRENTRY, STORE, addr);
     return 0;
@@ -98,6 +101,8 @@ int phys_mem_write_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 int phys_mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr,
         target_ulong size, void *buf){
+    if(!llvm_trace_on) return 0;
+
     DynValBuffer *dynval_buffer = PIFP->PIV->getDynvalBuffer();
     log_dynval(dynval_buffer, ADDRENTRY, LOAD, addr);
     return 0;
@@ -105,7 +110,7 @@ int phys_mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 namespace llvm {
 
-static void llvm_init(){
+static void llvm_logging_instrumentation_init(){
     ExecutionEngine *ee = tcg_llvm_ctx->getExecutionEngine();
     FunctionPassManager *fpm = tcg_llvm_ctx->getFunctionPassManager();
     Module *mod = tcg_llvm_ctx->getModule();
@@ -139,8 +144,9 @@ static void llvm_init(){
 
 
 int before_block_exec(CPUState *env, TranslationBlock *tb){
+  if(!llvm_trace_on) return 0;
 
-  if (tubtf_on) {
+  if (use_tubtf_format) {
     char *llvm_fn_name = (char *) tcg_llvm_get_func_name(tb);
     uint32_t pc, unk;
     sscanf(llvm_fn_name, "tcg-llvm-tb-%d-%x", &unk, &pc);
@@ -160,7 +166,9 @@ int before_block_exec(CPUState *env, TranslationBlock *tb){
 }
 
 int after_block_exec(CPUState *env, TranslationBlock *tb){
-  if (tubtf_on == 0) {
+  if(!llvm_trace_on) return 0;
+
+  if (use_tubtf_format == 0) {
     // flush dynlog to file
     assert(memlog);
     DynValBuffer *dynval_buffer = PIFP->PIV->getDynvalBuffer();
@@ -171,6 +179,8 @@ int after_block_exec(CPUState *env, TranslationBlock *tb){
 }
 
 int cb_cpu_restore_state(CPUState *env, TranslationBlock *tb){
+    if(!llvm_trace_on) return 0;
+
     printf("EXCEPTION - logging\n");
     DynValBuffer *dynval_buffer = PIFP->PIV->getDynvalBuffer();
     log_exception(dynval_buffer);
@@ -254,6 +264,7 @@ int user_after_syscall(void *cpu_env, bitmask_transtbl *fcntl_flags_tbl,
                        int num, abi_long arg1, abi_long arg2, abi_long arg3,
                        abi_long arg4, abi_long arg5, abi_long arg6,
                        abi_long arg7, abi_long arg8, void *p, abi_long ret){
+    if(!llvm_trace_on) return 0;
     switch (num){
         case TARGET_NR_read:
             user_read(ret, arg1, p);
@@ -278,16 +289,72 @@ int user_after_syscall(void *cpu_env, bitmask_transtbl *fcntl_flags_tbl,
 
 #endif // CONFIG_SOFTMMU
 
+void llvm_trace_enable(){
+    printf("enabling llvm_trace");
+
+    if (!execute_llvm){
+        panda_enable_llvm();
+    }
+    llvm::llvm_logging_instrumentation_init();
+    panda_enable_llvm_helpers();
+
+    /*
+     * Run instrumentation pass over all helper functions that are now in the
+     * module, and verify module.
+     */
+    llvm::Module *mod = tcg_llvm_ctx->getModule();
+    for (llvm::Module::iterator i = mod->begin(); i != mod->end(); i++){
+        if (i->isDeclaration()){
+            continue;
+        }
+#if defined(TARGET_ARM)
+        //TODO: Fix handling of ARM's cpu_reset() helper
+        // Currently, we skip instrumenting it, because we generate invalid LLVM bitcode if we try
+        std::string modname =  i->getName().str();
+        if (modname == "cpu_reset_llvm"){
+            printf("Skipping instrumentation of cpu_reset\n");
+            continue;
+        }
+#endif
+        PIFP->runOnFunction(*i);
+    }
+
+    std::string err;
+    if(verifyModule(*mod, llvm::AbortProcessAction, &err)){
+        printf("%s\n", err.c_str());
+        exit(1);
+    }
+
+    llvm_trace_on = true;
+}
+
+static uint64_t enable_on_asid = 0;
+
+int asid_changed(CPUState *env, target_ulong old_asid, target_ulong new_asid) {
+    (void)env;
+    (void)old_asid;
+
+    if(llvm_trace_on) return 0;
+
+    if(enable_on_asid == new_asid){
+        printf("asid reached, starting llvm_trace\n");
+        llvm_trace_enable();
+    }
+
+    return 0;
+}
+
 bool init_plugin(void *self) {
     printf("Initializing plugin llvm_trace\n");
 
     panda_arg_list *args = panda_get_args("llvm_trace");
-    basedir = panda_parse_string(args, "base", "/tmp");
-    tubtf_on = panda_parse_bool(args, "tubtf");
-    
+    basedir = panda_parse_string_opt(args, "base", "/tmp", "path of the folder where the output will be placed");
+    use_tubtf_format = panda_parse_bool_opt(args, "tubtf", "use newer tubt format (recommended)");
+    enable_on_asid = panda_parse_uint64_opt(args, "on_asid", 0, "only enable llvm_trace when a certain asid is observed");
+
     printf("llvm_trace using basedir=%s\n", basedir);
 
-    if (tubtf_on) {
+    if (use_tubtf_format) {
       printf("tubt is on\n");
       char tubtf_path[256];
       strcpy(tubtf_path, basedir);
@@ -325,43 +392,18 @@ bool init_plugin(void *self) {
     panda_register_callback(self, PANDA_CB_USER_AFTER_SYSCALL, pcb);
 #endif
 
-    if (!execute_llvm){
-        panda_enable_llvm();
-    }
-    llvm::llvm_init();
-    panda_enable_llvm_helpers();
-
-    /*
-     * Run instrumentation pass over all helper functions that are now in the
-     * module, and verify module.
-     */
-    llvm::Module *mod = tcg_llvm_ctx->getModule();
-    for (llvm::Module::iterator i = mod->begin(); i != mod->end(); i++){
-        if (i->isDeclaration()){
-            continue;
-        }
-#if defined(TARGET_ARM)
-        //TODO: Fix handling of ARM's cpu_reset() helper
-        // Currently, we skip instrumenting it, because we generate invalid LLVM bitcode if we try
-        std::string modname =  i->getName().str();
-        if (modname == "cpu_reset_llvm"){
-            printf("Skipping instrumentation of cpu_reset\n");
-            continue;
-        }
-#endif
-        PIFP->runOnFunction(*i);
-    }
-    std::string err;
-    if(verifyModule(*mod, llvm::AbortProcessAction, &err)){
-        printf("%s\n", err.c_str());
-        exit(1);
+    if(enable_on_asid){
+        pcb.asid_changed = asid_changed;
+        panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
+    } else {
+        llvm_trace_enable();
     }
 
     return true;
 }
 
 void uninit_plugin(void *self) {
-  if (tubtf_on) {
+  if (use_tubtf_format) {
     tubtf_close();
   }
   else {
@@ -403,7 +445,7 @@ void uninit_plugin(void *self) {
     }
     panda_disable_memcb();
 
-    if (tubtf_on == 0) {
+    if (use_tubtf_format == 0) {
       fclose(funclog);
       close_memlog();
     }
