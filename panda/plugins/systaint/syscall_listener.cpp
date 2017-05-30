@@ -41,6 +41,12 @@ optional<Syscall> parsePrototype(const std::string& prototype){
 /** Parses syscall definitions, called on plugin init */
 void parseSyscallDefs(const std::string& prototypesFilename){
     std::ifstream infile(prototypesFilename);
+
+    if(infile.fail()){
+        std::string errorMsg = "unable to open " + prototypesFilename;
+        throw std::runtime_error(errorMsg);
+    }
+
     std::string line;
 
     while (std::getline(infile, line))

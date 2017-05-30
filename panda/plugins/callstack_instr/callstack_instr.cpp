@@ -355,9 +355,8 @@ Panda__CallStack *pandalog_callstack_create() {
     v = callstacks[get_stackid(env)];
     rit = v.rbegin();
     uint32_t i=0;
-
     for (/*no init*/; rit != v.rend() && n < CALLSTACK_MAX_SIZE; ++rit, ++i) {
-        cs->addr[i] = rit->pc;
+        cs->addr[i] = rit->return_address;
     }
     return cs;
 }

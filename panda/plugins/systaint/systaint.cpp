@@ -420,7 +420,7 @@ bool init_plugin(void *self) {
     panda_require("callstack_instr");
     assert(init_callstack_instr_api());
 
-    string fname = "/Panda/panda_repo/panda/plugins/syscalls2/windows7_x86_prototypes.txt";
+    string fname = "windows7_x86_prototypes.txt";
     parseSyscallDefs(fname);
 
     PPP_REG_CB("callstack_instr", on_call2, on_call);
