@@ -50,7 +50,7 @@ void close_memlog(void){
 
 #ifdef CONFIG_LLVM // These functions are for LLVM code
 
-CPUState* env = first_cpu;
+
 
 bool regs_inited = false;
 
@@ -60,6 +60,7 @@ static void log_dyn_load(DynValBuffer *dynval_buf, uintptr_t dynval){
         regs_inited = true;
     }
 
+    CPUState* env = first_cpu;
     if (dynval == (uintptr_t)(&env)){
         // location of env is irrelevant
         DynValEntry dventry;
@@ -118,6 +119,7 @@ static void log_dyn_store(DynValBuffer *dynval_buf, uintptr_t dynval){
         regs_inited = true;
     }
 
+    CPUState* env = first_cpu;
     if (dynval == (uintptr_t)(&env)){
         DynValEntry dventry;
         memset(&dventry, 0, sizeof(DynValEntry));
@@ -207,6 +209,7 @@ void delete_dynval_buffer(DynValBuffer *dynval_buf){
 
 
 void write_dynval_buffer(DynValBuffer *dynval_buf, DynValEntry *entry){
+    CPUState* env = first_cpu;
     if (use_tubtf_format) {
         // XXX Fixme: note that when using tubt format, we still create that DynValBuffer.  Waste of memory
         uint64_t cr3, pc, typ;

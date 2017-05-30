@@ -297,7 +297,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 }
 
 // Before a block is executed, check if program-counter we are jumping in
-// is a return address, if it is, then we are returning, and we can remove our
+// is a registerd return address, if it is, then we are returning, and we can remove our
 // stackframe from our shadow stack
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     stackid current_stackid = get_stackid(cpu);

@@ -110,6 +110,10 @@ int phys_mem_read_callback(CPUState *env, target_ulong pc, target_ulong addr,
 
 namespace llvm {
 
+/**
+ * Links the log_dynval function into the LLVM JIT
+ * @warning this should be called after the helpers have been initialized
+ */
 static void llvm_logging_instrumentation_init(){
     ExecutionEngine *ee = tcg_llvm_ctx->getExecutionEngine();
     FunctionPassManager *fpm = tcg_llvm_ctx->getFunctionPassManager();
@@ -129,7 +133,7 @@ static void llvm_logging_instrumentation_init(){
     argTypes.push_back(IntegerType::get(ctx, 8*sizeof(uintptr_t)));
     logFunc = Function::Create(
             FunctionType::get(Type::getVoidTy(ctx), argTypes, false),
-            Function::ExternalLinkage, "log_dynval", mod);
+            GlobalVariable::ExternalLinkage, "log_dynval", mod); //was Function::ExternalLinkage
     logFunc->addFnAttr(Attribute::AlwaysInline);
     ee->addGlobalMapping(logFunc, (void*) &log_dynval);
 
@@ -290,13 +294,13 @@ int user_after_syscall(void *cpu_env, bitmask_transtbl *fcntl_flags_tbl,
 #endif // CONFIG_SOFTMMU
 
 void llvm_trace_enable(){
-    printf("enabling llvm_trace");
+    printf("enabling llvm_trace\n");
 
     if (!execute_llvm){
         panda_enable_llvm();
     }
-    llvm::llvm_logging_instrumentation_init();
     panda_enable_llvm_helpers();
+    llvm::llvm_logging_instrumentation_init();
 
     /*
      * Run instrumentation pass over all helper functions that are now in the
@@ -321,10 +325,11 @@ void llvm_trace_enable(){
 
     std::string err;
     if(verifyModule(*mod, llvm::AbortProcessAction, &err)){
-        printf("%s\n", err.c_str());
+        printf("verify module failed %s\n", err.c_str());
         exit(1);
     }
 
+    printf("llvm_trace enabled \n");
     llvm_trace_on = true;
 }
 
@@ -345,7 +350,6 @@ int asid_changed(CPUState *env, target_ulong old_asid, target_ulong new_asid) {
 }
 
 bool init_plugin(void *self) {
-    printf("Initializing plugin llvm_trace\n");
 
     panda_arg_list *args = panda_get_args("llvm_trace");
     basedir = panda_parse_string_opt(args, "base", "/tmp", "path of the folder where the output will be placed");
