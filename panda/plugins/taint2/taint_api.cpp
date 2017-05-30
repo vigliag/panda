@@ -89,7 +89,6 @@ std::set<uint32_t> labels_applied;
 
 // label -- associate label l with address a
 static void tp_label(Addr a, uint32_t l) {
-    assert (shad != NULL);
     if (debug_taint) start_debugging();
     LabelSetP ls = label_set_singleton(l);
     tp_labelset_put(a, ls);
@@ -98,7 +97,7 @@ static void tp_label(Addr a, uint32_t l) {
 
 // retrieve ls for this addr
 static void tp_ls_iter(LabelSetP ls, int (*app)(uint32_t, void *), void *opaque) {
-    if(ls == nullptr){
+    if (ls == nullptr) {
         return;
     }
     for (uint32_t el : *ls) {

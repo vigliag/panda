@@ -2236,6 +2236,7 @@ panda/plugins/callstack_instr/prog_point.h
 panda/plugins/callstack_instr/prog_point.h
 panda/plugins/callstack_instr/prog_point.h
 panda/plugins/config.llvm.panda
+panda/plugins/config.panda
 panda/plugins/cppskeleton/cppskeleton.cpp
 panda/plugins/cppskeleton/cppskeleton.cpp
 panda/plugins/cppskeleton/cppskeleton.cpp
@@ -2344,6 +2345,7 @@ panda/plugins/loaded/loaded.h
 panda/plugins/loaded/loaded.h
 panda/plugins/loaded/loaded.h
 panda/plugins/loaded/loaded.h
+panda/plugins/memsavep/USAGE.md
 panda/plugins/memsavep/memsavep.c
 panda/plugins/memsavep/memsavep.c
 panda/plugins/memsavep/memsavep.c

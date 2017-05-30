@@ -169,7 +169,7 @@ llvm-helpers.bc1: $(llvm-y)
 
 # Make explicit the fact that we need the tool present to do the morphing
 
-panda/tools/helper_call_modifier.o-cflags += $(LLVM_CXXFLAGS) -Wno-error=misleading-indentation
+panda/tools/helper_call_modifier.o-cflags += $(LLVM_CXXFLAGS) -Wno-misleading-indentation
 
 panda/tools:
 	$(call quiet-command,mkdir -p panda/tools,)

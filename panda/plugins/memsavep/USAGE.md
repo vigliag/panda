@@ -38,4 +38,4 @@ To dump memory at 66.2% to `mymem.dd`:
 To dump memory when an instruction count of 3314667015 is reached: 
 
     $PANDA_PATH/x86_64-softmmu/qemu-system-x86_64 -replay foo \
-        -panda memsavep:instr_count=66.2,file=mymem.dd
+        -panda memsavep:instr_count=3314667015,file=mymem.dd
