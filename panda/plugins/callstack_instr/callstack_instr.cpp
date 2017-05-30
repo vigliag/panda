@@ -82,7 +82,6 @@ std::map<stackid, std::vector<stack_entry>> callstacks;
 // EIP -> instr_type
 std::map<target_ulong, instr_type> call_cache;
 
-
 /* Helpers */
 
 static inline bool in_kernelspace(CPUArchState* env) {
@@ -249,7 +248,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 }
 
 // Before a block is executed, check if program-counter we are jumping in
-// is a return address, it is is, then we are returning, and we can remove our
+// is a return address, if it is, then we are returning, and we can remove our
 // stackframe from our shadow stack
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
@@ -444,6 +443,12 @@ bool init_plugin(void *self) {
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
     pcb.before_block_exec = before_block_exec;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+
+    if (panda_os_type == OST_WINDOWS) {
+        if (0 == strcmp(panda_os_details, "7")) {
+            //TODO chooose "thread-id" strategy
+        }
+    }
 
     return true;
 }

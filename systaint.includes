@@ -252,13 +252,7 @@ panda/plugins/syscalls_r
 ../panda1/qemu/panda_tools/dynslice
 panda/tools
 panda/tools/dynslice
-panda/include/fake_libc_include/netinet
-panda/include/fake_libc_include/sys
-panda/include/fake_libc_include/asm-generic
-panda/include/fake_libc_include/linux
 panda/src
-panda/include/fake_libc_include/arpa
 panda/llvm
 panda/src/rr
-panda/include/fake_libc_include/openssl
-panda/include/fake_libc_include
+

@@ -93,6 +93,22 @@ int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, taint2_iter_
     return 1;
 }
 
+/**
+ * Gets the current thread identifier on 32bit windows NT systems
+ * Only works in user-space, where the FS segment points to the TIB
+ * @see https://en.wikipedia.org/wiki/Win32_Thread_Information_Block
+ */
+target_ulong getThreadID(CPUState* cpu){
+    assert(!panda_in_kernel(cpu));
+
+    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+    target_ulong tib_address = env->segs[R_FS].base;
+    target_ulong curr_thread_id_address = tib_address + 0x24;
+
+    uint32_t curr_thread_id;
+    panda_virtual_memory_read(cpu, curr_thread_id_address, (uint8_t*)(&curr_thread_id), 4);
+    return curr_thread_id;
+}
 
 #ifdef TARGET_I386
 
@@ -154,6 +170,8 @@ void onSysEnter(CPUState *cpu, target_ulong pc, const Syscall& sc){
 #endif
 
 void systaint_event_enter(CPUState *cpu, uint32_t event_label){
+
+    cerr << "THREADID " << getThreadID(cpu) << endl;
 
     if(!current_event){
         cout << "EVENT enter " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;

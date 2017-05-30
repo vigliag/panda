@@ -1,3 +1,5 @@
+#include "panda/cheaders.h"
+
 extern "C" {
 #include "panda/plog.h"
 }
@@ -5,7 +7,6 @@ extern "C" {
 #include "logging.hpp"
 #include <vector>
 #include <unordered_map>
-#include <cstdint>
 #include <cstdio>
 #include <unordered_set>
 
