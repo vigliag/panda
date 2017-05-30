@@ -15,11 +15,13 @@ PANDAENDCOMMENT */
 
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 
 #include <map>
 #include <set>
 #include <vector>
 #include <algorithm>
+#include <iostream>
 
 #include <capstone/capstone.h>
 #if defined(TARGET_I386)
@@ -104,18 +106,46 @@ static inline target_ulong get_stack_pointer(CPUArchState* env) {
 #endif
 }
 
-static stackid get_stackid(CPUArchState* env) {
-    #ifdef USE_STACK_HEURISTIC
-        return get_stackid_from_closest_seen_stack(env);
-    #else
-        return std::make_pair(panda_current_asid(ENV_GET_CPU(env)),0);
-    #endif
+// Strategies for obtaining a stack_identifier (runtime selectable)
+
+enum StackidStrategy {
+    ASID = 0,
+    STACKPOINTER_HEURISTIC,
+    THREAD_ID
+};
+
+// Default strategy is ASID, the others should be considered experimental
+StackidStrategy stackid_strategy = ASID;
+
+/**
+ * Gets the current thread identifier on 32bit windows NT systems
+ * Only works in user-space, where the FS segment points to the TIB
+ * @see https://en.wikipedia.org/wiki/Win32_Thread_Information_Block
+ */
+target_ulong getThreadID(CPUState* cpu){
+#ifdef TARGET_I386
+    assert(!panda_in_kernel(cpu));
+
+    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+    target_ulong tib_address = env->segs[R_FS].base;
+    target_ulong curr_thread_id_address = tib_address + 0x24;
+
+    uint32_t curr_thread_id;
+    panda_virtual_memory_read(cpu, curr_thread_id_address, (uint8_t*)(&curr_thread_id), 4);
+    return curr_thread_id;
+#else
+    assert(false); //Not available on non-32bit TODO win64 support
+#endif
 }
 
-#ifdef USE_STACK_HEURISTIC
-static stackid get_stackid_from_closest_seen_stack(CPUArchState* env) {
+
+/**
+ * Obtains a stack_identifier by keeping track of seen stack_pointers
+ * employs a static map <asid,set<stack_pointers>>
+ */
+static stackid get_stackid_from_closest_seen_stack(CPUState* cpu) {
     const target_ulong MAX_STACK_DIFF = 5000;
-    
+
     // asid (process) -> set of seen stackpointers
     static std::map<target_ulong,std::set<target_ulong>> stacks_seen;
 
@@ -124,14 +154,16 @@ static stackid get_stackid_from_closest_seen_stack(CPUArchState* env) {
     static target_ulong last_seen_sp = 0;
     static target_ulong last_seen_sp_asid = 0;
 
+    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
+
     // Get the current asid, asid=0 if in kernelspace
-    target_ulong current_asid = in_kernelspace(env) ? 0 : panda_current_asid(ENV_GET_CPU(env));
+    target_ulong current_asid = in_kernelspace(env) ? 0 : panda_current_asid(cpu);
     // Get the stackpointer for the current processor
     target_ulong current_sp = get_stack_pointer(env);
 
     // If the last_seen_sp is still valid
     if (last_seen_sp && last_seen_sp_asid == current_asid) {
-        
+
         // Try with the last_seen_sp first
         if (std::abs(current_sp - last_seen_sp) < MAX_STACK_DIFF) {
             return std::make_pair(current_asid, last_seen_sp);
@@ -142,7 +174,7 @@ static stackid get_stackid_from_closest_seen_stack(CPUArchState* env) {
         // mark the last_seen_sp as invalid
         last_seen_sp = 0;
     }
-    
+
     auto &stackset = stacks_seen[current_asid];
 
     // If it's the first sp we've seen, insert it into the set, and return it
@@ -152,7 +184,7 @@ static stackid get_stackid_from_closest_seen_stack(CPUArchState* env) {
         last_seen_sp_asid = current_asid;
         return std::make_pair(current_asid,current_sp);
     }
-    
+
     // Find the closest stack pointer we've seen
     target_ulong closest_known_sp = 0;
     auto lb = stackset.lower_bound(current_sp);
@@ -162,7 +194,8 @@ static stackid get_stackid_from_closest_seen_stack(CPUArchState* env) {
     }
 
     if (lb != stackset.begin()) {
-        target_ulong value_less_than = *(lb-1);
+        lb--;
+        target_ulong value_less_than = *lb;
         if( !closest_known_sp || std::abs(value_less_than - current_sp) < std::abs(closest_known_sp - current_sp) ){
             closest_known_sp = current_sp;
         }
@@ -175,15 +208,31 @@ static stackid get_stackid_from_closest_seen_stack(CPUArchState* env) {
         last_seen_sp_asid = current_asid;
         return std::make_pair(current_asid, closest_known_sp);
     }
-    
+
     // If it's not close enough, then classify it as a new stack,
-    // remember and return it
+    // store it, then and return it
     stackset.insert(current_sp);
     last_seen_sp = current_sp;
     last_seen_sp_asid = current_asid;
-    return std::make_pair(current_asid,current_sp);
+    return std::make_pair(current_asid, current_sp);
 }
-#endif
+
+static stackid get_stackid(CPUState* cpu) {
+    switch(stackid_strategy){
+    case ASID:
+        return std::make_pair(panda_current_asid(cpu),0);
+    case STACKPOINTER_HEURISTIC:
+        return get_stackid_from_closest_seen_stack(cpu);
+    case THREAD_ID:
+        if(panda_in_kernel(cpu)){
+            return std::make_pair(panda_current_asid(cpu), 0);
+        } else {
+            return std::make_pair(panda_current_asid(cpu), getThreadID(cpu));
+        }
+    default:
+        assert(false);
+    }
+}
 
 /**
 Disassembles a block of code, then returns the instr_type of the last
@@ -251,8 +300,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 // is a return address, if it is, then we are returning, and we can remove our
 // stackframe from our shadow stack
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
-    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    stackid current_stackid = get_stackid(env);
+    stackid current_stackid = get_stackid(cpu);
     target_ulong pc = tb->pc;
 
     // TODO should check if the last executed instruction is indeed a return?
@@ -290,7 +338,7 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         uint32_t flags;
         cpu_get_tb_cpu_state(env, &pc, &cs_base, &flags);
 
-        stackid current_stackid = get_stackid(env);
+        stackid current_stackid = get_stackid(cpu);
 
         stack_entry se;
         se.function = pc;
@@ -315,8 +363,7 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
 
 // Public interface implementation
 int get_callers(target_ulong callers[], int n, CPUState* cpu) {
-    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    std::vector<stack_entry> &v = callstacks[get_stackid(env)];
+    std::vector<stack_entry> &v = callstacks[get_stackid(cpu)];
     auto rit = v.rbegin();
     int i = 0;
     for (/*no init*/; rit != v.rend() && i < n; ++rit, ++i) {
@@ -326,8 +373,7 @@ int get_callers(target_ulong callers[], int n, CPUState* cpu) {
 }
 
 int get_call_entries(struct CallstackStackEntry entries[], int n, CPUState *cpu){
-    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    std::vector<stack_entry> &v = callstacks[get_stackid(env)];
+    std::vector<stack_entry> &v = callstacks[get_stackid(cpu)];
     auto rit = v.rbegin();
     int i = 0;
     for (/*no init*/; rit != v.rend() && i < n; ++rit, ++i) {
@@ -341,9 +387,8 @@ int get_call_entries(struct CallstackStackEntry entries[], int n, CPUState *cpu)
 Panda__CallStack *pandalog_callstack_create() {
     assert (pandalog);
     CPUState *cpu = first_cpu;
-    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     uint32_t n = 0;
-    std::vector<stack_entry> &v = callstacks[get_stackid(env)];
+    std::vector<stack_entry> &v = callstacks[get_stackid(cpu)];
     auto rit = v.rbegin();
     for (/*no init*/; rit != v.rend() && n < CALLSTACK_MAX_SIZE; ++rit) {
         n ++;
@@ -352,7 +397,7 @@ Panda__CallStack *pandalog_callstack_create() {
     *cs = PANDA__CALL_STACK__INIT;
     cs->n_addr = n;
     cs->addr = (uint64_t *) malloc (sizeof(uint64_t) * n);
-    v = callstacks[get_stackid(env)];
+    v = callstacks[get_stackid(cpu)];
     rit = v.rbegin();
     uint32_t i=0;
     for (/*no init*/; rit != v.rend() && n < CALLSTACK_MAX_SIZE; ++rit, ++i) {
@@ -369,8 +414,7 @@ void pandalog_callstack_free(Panda__CallStack *cs) {
 
 
 int get_functions(target_ulong functions[], int n, CPUState* cpu) {
-    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    auto &v = callstacks[get_stackid(env)];
+    auto &v = callstacks[get_stackid(cpu)];
     if (v.empty()) {
         return 0;
     }
@@ -445,10 +489,20 @@ bool init_plugin(void *self) {
     pcb.before_block_exec = before_block_exec;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
 
-    if (panda_os_type == OST_WINDOWS) {
-        if (0 == strcmp(panda_os_details, "7")) {
-            //TODO chooose "thread-id" strategy
-        }
+    panda_arg_list *args = panda_get_args("callstack_instr");
+
+    const char *stackid_strategy_str = panda_parse_string_opt(args, "stackid_strategy", nullptr, "strategy to employ in obtaining a stack identifier (thread_id, heuristic, asid)");
+    if (stackid_strategy_str == nullptr) {
+        stackid_strategy = StackidStrategy::ASID;
+    } else if (0 == strcmp(stackid_strategy_str, "thread_id")) {
+        stackid_strategy = StackidStrategy::THREAD_ID;
+        std::cout << "callstack_instr employing thread_id strategy" << std::endl;
+    } else if (0 == strcmp(stackid_strategy_str, "heuristic")) {
+        stackid_strategy = StackidStrategy::STACKPOINTER_HEURISTIC;
+        std::cout << "callstack_instr employing stackpointer_heuristic strategy" << std::endl;
+    } else {
+        std::cerr << "unrecognized option " << stackid_strategy_str << std::endl;
+        return false;
     }
 
     return true;
