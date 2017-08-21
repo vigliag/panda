@@ -18,13 +18,13 @@
 #include <unordered_map>
 #include <vector>
 
-#include "callstack_instr/callstack_instr.h"
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
 extern "C" {
 #include <stdio.h>
-
+    
+#include "callstack_instr/callstack_instr.h"
 #include "callstack_instr/callstack_instr_ext.h"
 
 bool init_plugin(void *);
@@ -34,14 +34,18 @@ void uninit_plugin(void *);
 #include "EntropyCalculator.hpp"
 
 using namespace std;
-using fnid = target_ulong;
 
+// A function is identified by its address
+// (we care about a single process)
+using fnid = target_ulong;
 
 
 /* Data structures */
 
+// The process whose execution we want to inspect
 target_ulong tracked_asid = 0;
 
+// Stores informations about a called function.
 struct CallInfo {
     std::map<target_ulong, uint8_t> writeset;
     std::map<target_ulong, uint8_t> readset;
@@ -51,11 +55,13 @@ struct CallInfo {
     uint64_t called_by = 0; //TODO
 };
 
-//fnid -> number of calls
+// fnid -> number of calls
 std::unordered_map<uint64_t, int> calls;
-//call_id -> CallInfo
+
+// call_id -> CallInfo
 std::unordered_map<uint64_t, CallInfo> call_infos; 
 
+// Gets the current stack entry from callstack_instr
 CallstackStackEntry getCurrentEntry(CPUState *cpu){
     CallstackStackEntry entry;
     int entries_n = get_call_entries(&entry, 1,cpu);
@@ -63,10 +69,10 @@ CallstackStackEntry getCurrentEntry(CPUState *cpu){
     return entry;
 }
 
-
 /* Memory access logging */
 
 
+/** When a call instruciton is detected, create a new CallInfo */
 void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
     if (panda_in_kernel(cpu) || tracked_asid != panda_current_asid(cpu)){
         return;
@@ -84,6 +90,7 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
 }
 
 
+/** On write, add to the writeset (if CallInfo exists) */
 int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
@@ -104,6 +111,8 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     return 0;
 }
 
+
+/** On read, add to the readset (if CallInfo exists) */
 int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
@@ -146,7 +155,7 @@ struct bufferinfo {
     }
 };
 
-/* Turns a map<address,data> into a vector of bufferinfo */
+/* Computes a vector of BufferInfo from a map<address,data> (read/writeset) */
 std::vector<bufferinfo> toBufferInfos(std::map<target_ulong, uint8_t> addrset){
     std::vector<bufferinfo> res;
     bufferinfo temp;
@@ -186,7 +195,7 @@ std::vector<bufferinfo> toBufferInfos(std::map<target_ulong, uint8_t> addrset){
     return res;
 }
 
-
+/** On return, if the CallInfo exists, log it to stdout, then erase it */
 void on_ret(CPUState *cpu, target_ulong entrypoint, uint64_t callid, uint32_t skipped_frames){
     if (panda_in_kernel(cpu) || tracked_asid != panda_current_asid(cpu)){
         return;
@@ -257,6 +266,7 @@ bool init_plugin(void *self) {
 }
 
 
+/** Logs to the standard out the calls that haven't returned */
 void printstats(){
     std::cerr << "Missed calls: " << std::endl;
     for(auto const& callid_call : call_infos){

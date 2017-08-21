@@ -1,3 +1,14 @@
+/**
+* This plugin keeps tracks of function calls while executing a target process
+* - it logs the readset and writeset of the first 5 calls to any function
+* - it prints out the composition (count of arithmethic and total instruction)
+*   for every encontered function
+*
+* Note: this is a standalone version of fn_memlogger, which should be preferred
+* Note: the size of read/writes doesn't seem to be takne in consideration when
+*       updating the readset/writeset
+**/
+
 // This needs to be defined before anything is included in order to get
 // the PRIx64 macro
 #ifndef __STDC_FORMAT_MACROS
@@ -33,23 +44,35 @@ void uninit_plugin(void *);
 }
 
 using namespace std;
+
+// A function is identified by its address
+// (we care about a single process)
 using fnid = target_ulong;
 
+// Plugin argument: the process we are inspecting
 target_ulong tracked_asid = 0;
+
+// Stores last seen asid
 target_ulong current_asid = 0;
 
-//NOTE we'll assume a BB is contained into a function
-//TODO should I handle BB invalidation?
-
+// Stores a counters for the different kinds of instructions we care about
 struct InstCount {
     uint32_t arit = 0;
     uint32_t tot = 0;
 };
 
+// Stores the InstCount for all seen functions
 std::map<fnid, InstCount> totalCount;
+
+// Stores the cached InstCount for every basic_block
+// so that we avoid recomputing it again and again
 std::map<target_ulong, InstCount> bb_count_cache;
+
+// Tracks if LLVM translation is enabled. Initially false
 bool llvm_enabled = false;
 
+// LLVM instruction visitor which updates an internal InstCount
+// on every seen instruction
 class FnInstVisitor : public llvm::InstVisitor<FnInstVisitor> {
 public:
     InstCount count;
@@ -63,6 +86,7 @@ public:
     }
 };
 
+// Computes and caches the InstCount for a given BasicBlock
 InstCount countAndAddToCache(TranslationBlock *tb){
     FnInstVisitor FIV;
     llvm::Function* bbfn = tb->llvm_function;
@@ -78,12 +102,13 @@ InstCount countAndAddToCache(TranslationBlock *tb){
     return FIV.count;
 }
 
-// invalidate cache when translating/re-translating
+// Invalidates the cache when translating/re-translating
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
     bb_count_cache.erase(tb->pc);
     return 0;
 }
 
+// Enables LLVM the first time we get to the process we want
 // ASSUMING cr3 is changed inside of a block executing kernel code,
 // then jumps inside of application code (which hasn't been translated yet,
 // if this is the first time).
@@ -100,9 +125,11 @@ int asid_changed(CPUState *env, target_ulong old_asid, target_ulong new_asid) {
     return 0;
 }
 
+// Returns the current function identifier, asking the callstack_instr plugin
 fnid getCurrentFunction(CPUState *cpu){
     target_ulong fns[1];
     int fns_returned = get_functions(fns,1,cpu);
+
     if(!fns_returned){
         printf("No fns returned\n");
         return 0;
@@ -110,9 +137,10 @@ fnid getCurrentFunction(CPUState *cpu){
     return fns[0];
 }
 
-// Before executing a basic block, check if the cr3 is the right one, if it is,
-// take current executing function, and assign it the instruction count of the block
-// ASSUMING calls are executed in the previous block
+// Callback: Before executing a basic block:
+// - we check if the cr3 is the right one
+// - we take the currently executing function
+// - we compute the instruction count of the block, and adds it to the function
 int before_block_exec_cb(CPUState *cpu, TranslationBlock *tb){
     //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
 
@@ -124,8 +152,7 @@ int before_block_exec_cb(CPUState *cpu, TranslationBlock *tb){
     fnid current_fn = getCurrentFunction(cpu);
     target_ulong tb_identifier = tb->pc;
     
-    // Count instructions in this basic block 
-    // (take from cache if already counted)
+    // Count instructions in this basic block (or take from cache)
     InstCount bbcount; 
     if (bb_count_cache.count(tb_identifier)) {
         bbcount = bb_count_cache[tb_identifier];
@@ -140,10 +167,10 @@ int before_block_exec_cb(CPUState *cpu, TranslationBlock *tb){
 }
 
 /* Writeset and readset tracking */
-
 // We log the first 5 calls to any given function, together with their writeset,
 // readset, etcetera
 
+// Stores informations about a called function.
 struct CallInfo {
     std::set<target_ulong> writeset;
     std::set<target_ulong> readset;
@@ -152,12 +179,18 @@ struct CallInfo {
     uint64_t instruction_count_ret;
 };
 
-//fnid -> number of calls
+// fnid -> number of times the function was called
 std::unordered_map<uint64_t, int> calls;
 
-//call_id -> CallInfo
+// call_id -> CallInfo
 std::unordered_map<uint64_t, CallInfo> call_infos; 
 
+// On memory write callback
+// - checks the cr3 is the right one
+// - gets the instruction_count of the caller to use as identifier of this call
+// - gets or create a CallInfo for this call (but only if this function has 
+//   been called less than 5 times, else we return)
+// - adds the write to the CallInfo's writeset
 int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
@@ -174,11 +207,11 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     }
     
     if( call_infos.count(entry.call_id)){
-        // if the call is already being logged, log this write
+        // if we already have a CallInfo, we simply log this write
         call_infos[entry.call_id].writeset.insert(addr);
 
     } else if(calls[entry.function] < 5) {
-        // we still have calls to log, let's do that, then log this write
+        // we need to create a new CallInfo, then log this write
         calls[entry.function]++;
         call_infos[entry.call_id].program_counter = entry.function;
         call_infos[entry.call_id].writeset.insert(addr);
@@ -190,7 +223,9 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     return 0;
 }
 
-
+// On memory read callback
+// same logic as the write callback
+// TODO size is not used
 int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size) {
     //CPUArchState *env = (CPUArchState*)cpu->env_ptr;
@@ -256,7 +291,7 @@ bool init_plugin(void *self) {
     return true;
 }
 
-
+// Helper function to represent a write/read sets as a compact string
 std::string setToString(std::set<target_ulong> addrset){
     target_ulong base = 0;
     target_ulong consecutive = 0;
@@ -278,7 +313,7 @@ std::string setToString(std::set<target_ulong> addrset){
     return ss.str();
 }
 
-
+// Prints the collected stats on stdout
 void printstats(){
     
     std::cout << "Logged calls: " << endl;

@@ -1,3 +1,10 @@
+/**
+* This plugin listens for several kinds of events (hypercalls, systemcalls,
+* selected function calls) and employs taint analysis to build a dependency 
+* graph between them. It also provides infos about the buffers used by each 
+* event, and the provenance of each byte.
+*/
+
 #include "panda/plugin.h" //include plugin api we are implementing
 #include "taint2/taint2.h" //include taint2 module we'll use
 #include "callstack_instr/callstack_instr.h"
@@ -33,22 +40,51 @@ using namespace std;
 #include "callmemaccesstracker.hpp"
 #include "logging.hpp"
 
-// Dependency tree we are going to build
+// A dependencySet is a set of events ids
 using dependencySet = std::unordered_set<uint32_t>;
+
+// Map to each event to its dependencies
 static std::map<uint32_t, dependencySet> eventDependencies;
 
 
 #ifdef TARGET_I386
 
-uint32_t current_syscall = 0;
+
+// ARGS:
+//////////////////
+
+// the asid we wish to track
 uint32_t tracked_asid = 0;
 
-static uint32_t current_event = 0;
+// the encoding function we wish to track
 static uint32_t tracked_encoding_fn = 0;
+
+// whether we want to run without LLVM and taint analysis
 static bool no_llvm = false;
+
+// filename where to print the function call data we collect
 static const char* outfile = nullptr;
+
+
+// Globals:
+//////////////
+
+// Syscall we are currently into (if any)
+// uint32_t current_syscall = 0;
+
+// Event we are currently into (if any)
+static uint32_t current_event = 0;
+
+// Opened filepointer for writing collected function data
 static FILE* outfp = nullptr;
+
+// Memtracker for the currently running event
 CallMemAccessTracker current_event_memtracker;
+
+
+// Helpers:
+/////////////////////////
+
 
 /* On windows, checks if a virtual address is in user-space */
 bool isUserSpaceAddress(uint64_t virt_addr){
@@ -74,8 +110,8 @@ int currentEventDependencyAdder(uint32_t dependency, void *address){
     return 0;
 }
 
+/** Reads the labels for a given memory range, executing the callback function for each*/
 using taint2_iter_callback = int (*)(uint32_t, void*);
-
 int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, taint2_iter_callback callback){
     if(!taint2_enabled()) return 0;
 
@@ -95,8 +131,15 @@ int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, taint2_iter_
 
 #ifdef TARGET_I386
 
-/* When a sysenter is being executed, and we are about to jump in kernel-space.
-Note this is only executed for interesting asid (filtering has been done on translate_callback) */
+/** 
+* When a syscall is detected and we are about to jump in kernel-space.
+* This function adds semantics and taint data to the current_event
+*
+* - get the size of the parameters to the syscall
+* - read taint from the arguments, to add as dependencies to the current_event
+*
+* Note this is only called for interesting asid 
+* (filtering has been done on translate_callback) */
 void onSysEnter(CPUState *cpu, target_ulong pc, const Syscall& sc){
     CPUArchState *env = (CPUArchState*)cpu->env_ptr;
 
@@ -152,6 +195,12 @@ void onSysEnter(CPUState *cpu, target_ulong pc, const Syscall& sc){
 
 #endif
 
+/** 
+* When entering a systaint_event
+* - Logs it to stdout
+* - Sets it as current_event (unless it's nested event)
+* - Enables taint if it isn't already
+*/
 void systaint_event_enter(CPUState *cpu, uint32_t event_label){
 
     if(!current_event){
@@ -177,6 +226,13 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
     }
 }
 
+/**
+* When leaving a systaint event
+* - Log it to stdout
+* - Taint all addresses in the writeset with the event's writeset
+* - Log the event to the output file
+* - reset current_event to zero 
+*/
 void systaint_event_exit(CPUState *cpu, uint32_t event_label){
     assert(event_label);
     assert(tracked_asid == panda_current_asid(cpu));
@@ -225,6 +281,10 @@ uint32_t getCurrentEncodingCall(CPUState* cpu){
     return current_encoding_call_;
 }
 
+/** 
+* When any function is called
+* - check if it is our encoding call, and set it as current_encoding_call_
+*/
 void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
     if (panda_in_kernel(cpu) || tracked_asid != panda_current_asid(cpu)){
         return;
@@ -239,6 +299,12 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
     }
 }
 
+/**
+* When any function returns
+* - only if it is our encoding call:
+* - label addresses in the writeset with the encoding call id
+* - output the event, and clear the memtracker
+*/
 void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
                uint32_t skipped_frames){
 
@@ -268,10 +334,13 @@ void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
 }
 
 
-// ======================== 
-// Memory access tracking 
-// ========================
+// ================================
+// Memory access tracking callbacks
+// ================================
 
+/**
+* Adds an address as dependency to the current_encoding_call
+*/
 int currentEncodingCallDependencyAdder(uint32_t dependency, void *addressp){
     target_ulong addr = *(target_ulong*) addressp;
 
@@ -288,6 +357,11 @@ int currentEncodingCallDependencyAdder(uint32_t dependency, void *addressp){
     return 0;
 }
 
+/**
+* When any memory write happens
+* - if there's a current_event, add the write to its memtracker
+* - if there's a current_encoding_call, add the write to its memtracker 
+*/
 int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
@@ -324,6 +398,11 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     return 0;
 }
 
+/**
+* When any memory read happens
+* - if there's a current_event, or a current_encoding call
+* - add the read to their memtracker, and add the read labels to their dependencies 
+*/
 int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
@@ -363,6 +442,7 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
 #endif // TARGET_I386
 
+/** Log taint changes to a file (debugging)*/
 FILE* taintchanges = nullptr;
 
 void on_taint_change (Addr ma, uint64_t size){

@@ -1,3 +1,7 @@
+/**
+* This plugin listens for hypercalls and emits SYSENTER/SYSEXIT events
+*/
+
 #include "panda/plugin.h"
 
 extern "C" {
