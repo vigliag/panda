@@ -40,6 +40,7 @@
 #include "qemu/cutils.h"
 #include "qemu/help_option.h"
 #include "qemu/uuid.h"
+#include <unistd.h>
 
 #ifdef CONFIG_SECCOMP
 #include "sysemu/seccomp.h"
@@ -3035,6 +3036,17 @@ static int qemu_read_default_config_file(void)
     return 0;
 }
 
+// Panda stuff
+static char* this_executable_path(const char* argv0){
+    char buf[1024] = {0};
+    ssize_t size = readlink("/proc/self/exe", buf, sizeof(buf));
+    if (size == -1 || size == 0 || size == sizeof(buf)) {
+        //fallback
+        return realpath(argv0, NULL);
+    }
+    return strdup(buf);
+}
+
 int main(int argc, char **argv, char **envp)
 {
     int i;
@@ -3075,7 +3087,9 @@ int main(int argc, char **argv, char **envp)
     // PANDA stuff
     gargv = argv;
     gargc = argc;
-    qemu_file = realpath(argv[0], NULL);
+    qemu_file = this_executable_path(argv[0]);
+    assert(qemu_file != NULL);
+
     const char* replay_name = NULL;
     const char* record_name = NULL;
     // In order to load PANDA plugins all at once at the end
