@@ -21,10 +21,12 @@
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
+
+#include "callstack_instr/callstack_instr.h"
+
 extern "C" {
 #include <stdio.h>
     
-#include "callstack_instr/callstack_instr.h"
 #include "callstack_instr/callstack_instr_ext.h"
 
 bool init_plugin(void *);
