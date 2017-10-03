@@ -10,6 +10,7 @@
 #include "callstack_instr/callstack_instr.h"
 #include "sysevent/sysevent.h"
 #include "syscall_listener.hpp"
+#include <libgen.h>
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
@@ -54,6 +55,7 @@ static std::map<uint32_t, dependencySet> eventDependencies;
 //////////////////
 
 // the asid we wish to track
+std::set<uint32_t> tracked_asids;
 uint32_t tracked_asid = 0;
 
 // the encoding function we wish to track
@@ -213,11 +215,12 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
         cout << "EVENT ignored " << event_label << " instcount " <<  rr_get_guest_instr_count()<< " current " << current_event << endl;
     }
 
+    target_ulong asid = panda_current_asid(cpu);
     // Start tracking this process if not doing it already
-    if(!tracked_asid){
-        target_ulong asid = panda_current_asid(cpu);
+    if(!tracked_asids.count(asid)){
+
         cout << "TRACKING " << asid << " instcount " <<  rr_get_guest_instr_count() << endl;
-        tracked_asid = asid;
+        tracked_asids.insert(asid);
 
         if (!taint2_enabled() && !no_llvm) {
             printf("enabling taint\n");
@@ -235,7 +238,7 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
 */
 void systaint_event_exit(CPUState *cpu, uint32_t event_label){
     assert(event_label);
-    assert(tracked_asid == panda_current_asid(cpu));
+    assert(tracked_asids.count(panda_current_asid(cpu)));
 
     if(current_event && event_label == current_event){
         cout << "EVENT exit " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
@@ -286,7 +289,7 @@ uint32_t getCurrentEncodingCall(CPUState* cpu){
 * - check if it is our encoding call, and set it as current_encoding_call_
 */
 void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
-    if (panda_in_kernel(cpu) || tracked_asid != panda_current_asid(cpu)){
+    if (panda_in_kernel(cpu) || !tracked_asids.count(panda_current_asid(cpu))){
         return;
     }
 
@@ -308,7 +311,7 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
 void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
                uint32_t skipped_frames){
 
-    if (panda_in_kernel(cpu) || tracked_asid != panda_current_asid(cpu)){
+    if (panda_in_kernel(cpu) || !tracked_asids.count(panda_current_asid(cpu))){
         return;
     }
 
@@ -366,7 +369,7 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
 
-    if (tracked_asid != panda_current_asid(cpu) || !isUserSpaceAddress(addr)){
+    if (!tracked_asids.count(panda_current_asid(cpu)) || !isUserSpaceAddress(addr)){
         return 0;
     }
 
@@ -407,7 +410,7 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
 
-    if (tracked_asid != panda_current_asid(cpu)) {
+    if (!tracked_asids.count(panda_current_asid(cpu))) {
         return 0;
     }
 
@@ -453,7 +456,6 @@ void on_taint_change (Addr ma, uint64_t size){
 }
 
 void *plugin_self;
-
 bool init_plugin(void *self) {
  
 #ifdef TARGET_I386
@@ -481,8 +483,14 @@ bool init_plugin(void *self) {
     panda_require("callstack_instr");
     assert(init_callstack_instr_api());
 
-    string fname = "windows7_x86_prototypes.txt";
-    parseSyscallDefs(fname);
+    /* TODO use relative path
+     * extern const char *qemu_file;
+     * char * dirn = strdup(qemu_file);
+     * string dname(dirname(dirn));
+     * string fname = dname + "/....windows7_x86_prototypes.txt";
+     */
+
+    parseSyscallDefs("windows7_x86_prototypes.txt");
 
     PPP_REG_CB("callstack_instr", on_call2, on_call);
     PPP_REG_CB("callstack_instr", on_ret2, on_return);
@@ -493,7 +501,6 @@ bool init_plugin(void *self) {
 
     panda_arg_list *args = panda_get_args("systaint");
     if (args != NULL) {
-        tracked_asid = panda_parse_uint64_opt(args, "asid", 0, "asid to track");
         tracked_encoding_fn = panda_parse_uint64_opt(args, "encfn",  0, "encoding function to track");
         no_llvm = panda_parse_bool_opt(args, "no_llvm", "disable llvm and tainting");
         outfile = panda_parse_string_opt(args, "outfile", nullptr, "an output file");
