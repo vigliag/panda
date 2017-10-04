@@ -17,6 +17,8 @@ wintrospection
 asid_instr_count
 replaymovie
 memsavep
+<<<<<<< HEAD
 fn_memlogger
 sysevent
-sysrecstarter
+=======
+>>>>>>> upstream/master

@@ -219,6 +219,7 @@ tests/tcg/mips/mips64-dspr2
 trace
 ui
 build/i386-softmmu/panda/plugins/
+build/i386-softmmu/panda/plugins/taint2
 build/i386-softmmu/
 build/
 panda/plugins/systaint
@@ -256,3 +257,5 @@ panda/src
 panda/llvm
 panda/src/rr
 
+panda/plugins/checkpoint_test
+panda/plugins/sysrecstarter

@@ -2185,6 +2185,8 @@ panda/plugins/asid_instr_count/asid_instr_count.cpp
 panda/plugins/asid_instr_count/asid_instr_count.cpp
 panda/plugins/asid_instr_count/asid_instr_count.cpp
 panda/plugins/asid_instr_count/asid_instr_count.cpp
+panda/plugins/asid_instr_count/asid_instr_count.cpp
+panda/plugins/asid_instr_count/asid_instr_count.h
 panda/plugins/asid_instr_count/asid_instr_count.h
 panda/plugins/asid_instr_count/asid_instr_count.h
 panda/plugins/asid_instr_count/asid_instr_count.h
@@ -2195,6 +2197,8 @@ panda/plugins/asid_instr_count/asid_instr_count_int.h
 panda/plugins/asid_instr_count/asid_instr_count_int.h
 panda/plugins/asid_instr_count/asid_instr_count_int.h
 panda/plugins/asid_instr_count/asid_instr_count_int.h
+panda/plugins/asid_instr_count/asid_instr_count_int.h
+panda/plugins/asid_instr_count/asid_instr_count_int_fns.h
 panda/plugins/asid_instr_count/asid_instr_count_int_fns.h
 panda/plugins/asid_instr_count/asid_instr_count_int_fns.h
 panda/plugins/asid_instr_count/asid_instr_count_int_fns.h
@@ -2205,6 +2209,8 @@ panda/plugins/asidstory/asidstory.cpp
 panda/plugins/asidstory/asidstory.cpp
 panda/plugins/asidstory/asidstory.cpp
 panda/plugins/asidstory/asidstory.cpp
+panda/plugins/asidstory/asidstory.cpp
+panda/plugins/asidstory/asidstory.h
 panda/plugins/asidstory/asidstory.h
 panda/plugins/asidstory/asidstory.h
 panda/plugins/asidstory/asidstory.h
@@ -2215,6 +2221,8 @@ panda/plugins/callstack_instr/callstack_instr.cpp
 panda/plugins/callstack_instr/callstack_instr.cpp
 panda/plugins/callstack_instr/callstack_instr.cpp
 panda/plugins/callstack_instr/callstack_instr.cpp
+panda/plugins/callstack_instr/callstack_instr.cpp
+panda/plugins/callstack_instr/callstack_instr.h
 panda/plugins/callstack_instr/callstack_instr.h
 panda/plugins/callstack_instr/callstack_instr.h
 panda/plugins/callstack_instr/callstack_instr.h
@@ -2225,6 +2233,8 @@ panda/plugins/callstack_instr/callstack_instr_int.h
 panda/plugins/callstack_instr/callstack_instr_int.h
 panda/plugins/callstack_instr/callstack_instr_int.h
 panda/plugins/callstack_instr/callstack_instr_int.h
+panda/plugins/callstack_instr/callstack_instr_int.h
+panda/plugins/callstack_instr/callstack_instr_int_fns.h
 panda/plugins/callstack_instr/callstack_instr_int_fns.h
 panda/plugins/callstack_instr/callstack_instr_int_fns.h
 panda/plugins/callstack_instr/callstack_instr_int_fns.h
@@ -2235,6 +2245,8 @@ panda/plugins/callstack_instr/prog_point.h
 panda/plugins/callstack_instr/prog_point.h
 panda/plugins/callstack_instr/prog_point.h
 panda/plugins/callstack_instr/prog_point.h
+panda/plugins/callstack_instr/prog_point.h
+panda/plugins/checkpoint_test/checkpoint_test.c
 panda/plugins/config.llvm.panda
 panda/plugins/config.panda
 panda/plugins/cppskeleton/cppskeleton.cpp
@@ -2242,6 +2254,8 @@ panda/plugins/cppskeleton/cppskeleton.cpp
 panda/plugins/cppskeleton/cppskeleton.cpp
 panda/plugins/cppskeleton/cppskeleton.cpp
 panda/plugins/cppskeleton/cppskeleton.cpp
+panda/plugins/cppskeleton/cppskeleton.cpp
+panda/plugins/cskeleton/cskeleton.c
 panda/plugins/cskeleton/cskeleton.c
 panda/plugins/cskeleton/cskeleton.c
 panda/plugins/cskeleton/cskeleton.c
@@ -2252,6 +2266,8 @@ panda/plugins/file_taint/file_taint.cpp
 panda/plugins/file_taint/file_taint.cpp
 panda/plugins/file_taint/file_taint.cpp
 panda/plugins/file_taint/file_taint.cpp
+panda/plugins/file_taint/file_taint.cpp
+panda/plugins/file_taint/file_taint.h
 panda/plugins/file_taint/file_taint.h
 panda/plugins/file_taint/file_taint.h
 panda/plugins/file_taint/file_taint.h
@@ -2262,6 +2278,8 @@ panda/plugins/file_taint/file_taint_int.h
 panda/plugins/file_taint/file_taint_int.h
 panda/plugins/file_taint/file_taint_int.h
 panda/plugins/file_taint/file_taint_int.h
+panda/plugins/file_taint/file_taint_int.h
+panda/plugins/file_taint/file_taint_int_fns.h
 panda/plugins/file_taint/file_taint_int_fns.h
 panda/plugins/file_taint/file_taint_int_fns.h
 panda/plugins/file_taint/file_taint_int_fns.h
@@ -2272,6 +2290,8 @@ panda/plugins/fn_composition/fn_composition.cpp
 panda/plugins/fn_composition/fn_composition.cpp
 panda/plugins/fn_composition/fn_composition.cpp
 panda/plugins/fn_composition/fn_composition.cpp
+panda/plugins/fn_composition/fn_composition.cpp
+panda/plugins/fn_memlogger/EntropyCalculator.hpp
 panda/plugins/fn_memlogger/EntropyCalculator.hpp
 panda/plugins/fn_memlogger/EntropyCalculator.hpp
 panda/plugins/fn_memlogger/EntropyCalculator.hpp
@@ -2282,6 +2302,8 @@ panda/plugins/fn_memlogger/fn_memlogger.cpp
 panda/plugins/fn_memlogger/fn_memlogger.cpp
 panda/plugins/fn_memlogger/fn_memlogger.cpp
 panda/plugins/fn_memlogger/fn_memlogger.cpp
+panda/plugins/fn_memlogger/fn_memlogger.cpp
+panda/plugins/libfi/libfi.cpp
 panda/plugins/libfi/libfi.cpp
 panda/plugins/libfi/libfi.cpp
 panda/plugins/libfi/libfi.cpp
@@ -2292,11 +2314,14 @@ panda/plugins/libfi/libfi.h
 panda/plugins/libfi/libfi.h
 panda/plugins/libfi/libfi.h
 panda/plugins/libfi/libfi.h
+panda/plugins/libfi/libfi.h
 panda/plugins/libfi/libfi_int.h
 panda/plugins/libfi/libfi_int.h
 panda/plugins/libfi/libfi_int.h
 panda/plugins/libfi/libfi_int.h
 panda/plugins/libfi/libfi_int.h
+panda/plugins/libfi/libfi_int.h
+panda/plugins/libfi/libfi_int_fns.h
 panda/plugins/libfi/libfi_int_fns.h
 panda/plugins/libfi/libfi_int_fns.h
 panda/plugins/libfi/libfi_int_fns.h
@@ -2305,8 +2330,11 @@ panda/plugins/libfi/libfi_int_fns.h
 panda/plugins/llvm_trace/USAGE.md
 panda/plugins/llvm_trace/guestarch.cpp
 panda/plugins/llvm_trace/guestarch.cpp
+panda/plugins/llvm_trace/guestarch.cpp
 panda/plugins/llvm_trace/guestarch.h
 panda/plugins/llvm_trace/guestarch.h
+panda/plugins/llvm_trace/guestarch.h
+panda/plugins/llvm_trace/llvm_trace.cpp
 panda/plugins/llvm_trace/llvm_trace.cpp
 panda/plugins/llvm_trace/llvm_trace.cpp
 panda/plugins/llvm_trace/llvm_trace.cpp
@@ -2315,6 +2343,8 @@ panda/plugins/llvm_trace/llvm_trace_test.cpp
 panda/plugins/llvm_trace/llvm_trace_test.cpp
 panda/plugins/llvm_trace/llvm_trace_test.cpp
 panda/plugins/llvm_trace/llvm_trace_test.cpp
+panda/plugins/llvm_trace/llvm_trace_test.cpp
+panda/plugins/llvm_trace/llvm_trace_test.h
 panda/plugins/llvm_trace/llvm_trace_test.h
 panda/plugins/llvm_trace/llvm_trace_test.h
 panda/plugins/llvm_trace/llvm_trace_test.h
@@ -2323,23 +2353,31 @@ panda/plugins/llvm_trace/panda_dynval_inst.cpp
 panda/plugins/llvm_trace/panda_dynval_inst.cpp
 panda/plugins/llvm_trace/panda_dynval_inst.cpp
 panda/plugins/llvm_trace/panda_dynval_inst.cpp
+panda/plugins/llvm_trace/panda_dynval_inst.cpp
+panda/plugins/llvm_trace/panda_dynval_inst.h
 panda/plugins/llvm_trace/panda_dynval_inst.h
 panda/plugins/llvm_trace/panda_dynval_inst.h
 panda/plugins/llvm_trace/panda_dynval_inst.h
 panda/plugins/llvm_trace/panda_dynval_inst.h
 panda/plugins/llvm_trace/panda_memlog.cpp
 panda/plugins/llvm_trace/panda_memlog.cpp
+panda/plugins/llvm_trace/panda_memlog.cpp
+panda/plugins/llvm_trace/panda_memlog.h
 panda/plugins/llvm_trace/panda_memlog.h
 panda/plugins/llvm_trace/panda_memlog.h
 panda/plugins/llvm_trace/tubtf.cpp
 panda/plugins/llvm_trace/tubtf.cpp
+panda/plugins/llvm_trace/tubtf.cpp
 panda/plugins/llvm_trace/tubtf.h
 panda/plugins/llvm_trace/tubtf.h
+panda/plugins/llvm_trace/tubtf.h
 panda/plugins/loaded/loaded.cpp
 panda/plugins/loaded/loaded.cpp
 panda/plugins/loaded/loaded.cpp
 panda/plugins/loaded/loaded.cpp
 panda/plugins/loaded/loaded.cpp
+panda/plugins/loaded/loaded.cpp
+panda/plugins/loaded/loaded.h
 panda/plugins/loaded/loaded.h
 panda/plugins/loaded/loaded.h
 panda/plugins/loaded/loaded.h
@@ -2351,6 +2389,8 @@ panda/plugins/memsavep/memsavep.c
 panda/plugins/memsavep/memsavep.c
 panda/plugins/memsavep/memsavep.c
 panda/plugins/memsavep/memsavep.c
+panda/plugins/memsavep/memsavep.c
+panda/plugins/osi/os_intro.c
 panda/plugins/osi/os_intro.c
 panda/plugins/osi/os_intro.c
 panda/plugins/osi/os_intro.c
@@ -2361,6 +2401,8 @@ panda/plugins/osi/os_intro.h
 panda/plugins/osi/os_intro.h
 panda/plugins/osi/os_intro.h
 panda/plugins/osi/os_intro.h
+panda/plugins/osi/os_intro.h
+panda/plugins/osi/osi_int.h
 panda/plugins/osi/osi_int.h
 panda/plugins/osi/osi_int.h
 panda/plugins/osi/osi_int.h
@@ -2371,6 +2413,8 @@ panda/plugins/osi/osi_int_fns.h
 panda/plugins/osi/osi_int_fns.h
 panda/plugins/osi/osi_int_fns.h
 panda/plugins/osi/osi_int_fns.h
+panda/plugins/osi/osi_int_fns.h
+panda/plugins/osi/osi_proc_events.cpp
 panda/plugins/osi/osi_proc_events.cpp
 panda/plugins/osi/osi_proc_events.cpp
 panda/plugins/osi/osi_proc_events.cpp
@@ -2381,6 +2425,8 @@ panda/plugins/osi/osi_proc_events.h
 panda/plugins/osi/osi_proc_events.h
 panda/plugins/osi/osi_proc_events.h
 panda/plugins/osi/osi_proc_events.h
+panda/plugins/osi/osi_proc_events.h
+panda/plugins/osi/osi_types.h
 panda/plugins/osi/osi_types.h
 panda/plugins/osi/osi_types.h
 panda/plugins/osi/osi_types.h
@@ -2391,6 +2437,8 @@ panda/plugins/osi_linux/osi_linux.cpp
 panda/plugins/osi_linux/osi_linux.cpp
 panda/plugins/osi_linux/osi_linux.cpp
 panda/plugins/osi_linux/osi_linux.cpp
+panda/plugins/osi_linux/osi_linux.cpp
+panda/plugins/osi_linux/osi_linux.h
 panda/plugins/osi_linux/osi_linux.h
 panda/plugins/osi_linux/osi_linux.h
 panda/plugins/osi_linux/osi_linux.h
@@ -2401,6 +2449,8 @@ panda/plugins/osi_linux/osi_linux_int.h
 panda/plugins/osi_linux/osi_linux_int.h
 panda/plugins/osi_linux/osi_linux_int.h
 panda/plugins/osi_linux/osi_linux_int.h
+panda/plugins/osi_linux/osi_linux_int.h
+panda/plugins/osi_linux/osi_linux_int_fns.h
 panda/plugins/osi_linux/osi_linux_int_fns.h
 panda/plugins/osi_linux/osi_linux_int_fns.h
 panda/plugins/osi_linux/osi_linux_int_fns.h
@@ -2411,6 +2461,8 @@ panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.c
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.c
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.c
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.c
+panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.c
+panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.h
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.h
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.h
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo.h
@@ -2421,6 +2473,8 @@ panda/plugins/osi_linux/utils/kernelinfo/kernelinfo_read.c
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo_read.c
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo_read.c
 panda/plugins/osi_linux/utils/kernelinfo/kernelinfo_read.c
+panda/plugins/osi_linux/utils/kernelinfo/kernelinfo_read.c
+panda/plugins/osi_test/osi_test.c
 panda/plugins/osi_test/osi_test.c
 panda/plugins/osi_test/osi_test.c
 panda/plugins/osi_test/osi_test.c
@@ -2431,6 +2485,8 @@ panda/plugins/pri/pri.c
 panda/plugins/pri/pri.c
 panda/plugins/pri/pri.c
 panda/plugins/pri/pri.c
+panda/plugins/pri/pri.c
+panda/plugins/pri/pri.h
 panda/plugins/pri/pri.h
 panda/plugins/pri/pri.h
 panda/plugins/pri/pri.h
@@ -2441,6 +2497,8 @@ panda/plugins/pri/pri_int.h
 panda/plugins/pri/pri_int.h
 panda/plugins/pri/pri_int.h
 panda/plugins/pri/pri_int.h
+panda/plugins/pri/pri_int.h
+panda/plugins/pri/pri_int_fns.h
 panda/plugins/pri/pri_int_fns.h
 panda/plugins/pri/pri_int_fns.h
 panda/plugins/pri/pri_int_fns.h
@@ -2451,6 +2509,8 @@ panda/plugins/pri/pri_types.h
 panda/plugins/pri/pri_types.h
 panda/plugins/pri/pri_types.h
 panda/plugins/pri/pri_types.h
+panda/plugins/pri/pri_types.h
+panda/plugins/pri_dwarf/pri_dwarf.cpp
 panda/plugins/pri_dwarf/pri_dwarf.cpp
 panda/plugins/pri_dwarf/pri_dwarf.cpp
 panda/plugins/pri_dwarf/pri_dwarf.cpp
@@ -2461,6 +2521,8 @@ panda/plugins/pri_dwarf/pri_dwarf.h
 panda/plugins/pri_dwarf/pri_dwarf.h
 panda/plugins/pri_dwarf/pri_dwarf.h
 panda/plugins/pri_dwarf/pri_dwarf.h
+panda/plugins/pri_dwarf/pri_dwarf.h
+panda/plugins/pri_dwarf/pri_dwarf_int.h
 panda/plugins/pri_dwarf/pri_dwarf_int.h
 panda/plugins/pri_dwarf/pri_dwarf_int.h
 panda/plugins/pri_dwarf/pri_dwarf_int.h
@@ -2471,6 +2533,8 @@ panda/plugins/pri_dwarf/pri_dwarf_int_fns.h
 panda/plugins/pri_dwarf/pri_dwarf_int_fns.h
 panda/plugins/pri_dwarf/pri_dwarf_int_fns.h
 panda/plugins/pri_dwarf/pri_dwarf_int_fns.h
+panda/plugins/pri_dwarf/pri_dwarf_int_fns.h
+panda/plugins/pri_dwarf/pri_dwarf_types.h
 panda/plugins/pri_dwarf/pri_dwarf_types.h
 panda/plugins/pri_dwarf/pri_dwarf_types.h
 panda/plugins/pri_dwarf/pri_dwarf_types.h
@@ -2481,6 +2545,8 @@ panda/plugins/pri_dwarf/pri_dwarf_util.h
 panda/plugins/pri_dwarf/pri_dwarf_util.h
 panda/plugins/pri_dwarf/pri_dwarf_util.h
 panda/plugins/pri_dwarf/pri_dwarf_util.h
+panda/plugins/pri_dwarf/pri_dwarf_util.h
+panda/plugins/pri_simple/pri_simple.cpp
 panda/plugins/pri_simple/pri_simple.cpp
 panda/plugins/pri_simple/pri_simple.cpp
 panda/plugins/pri_simple/pri_simple.cpp
@@ -2491,6 +2557,8 @@ panda/plugins/pri_taint/pri_taint.cpp
 panda/plugins/pri_taint/pri_taint.cpp
 panda/plugins/pri_taint/pri_taint.cpp
 panda/plugins/pri_taint/pri_taint.cpp
+panda/plugins/pri_taint/pri_taint.cpp
+panda/plugins/pri_trace/pri_trace.cpp
 panda/plugins/pri_trace/pri_trace.cpp
 panda/plugins/pri_trace/pri_trace.cpp
 panda/plugins/pri_trace/pri_trace.cpp
@@ -2501,6 +2569,8 @@ panda/plugins/replaymovie/replaymovie.c
 panda/plugins/replaymovie/replaymovie.c
 panda/plugins/replaymovie/replaymovie.c
 panda/plugins/replaymovie/replaymovie.c
+panda/plugins/replaymovie/replaymovie.c
+panda/plugins/scissors/scissors.c
 panda/plugins/scissors/scissors.c
 panda/plugins/scissors/scissors.c
 panda/plugins/scissors/scissors.c
@@ -2511,6 +2581,8 @@ panda/plugins/stringsearch/stringsearch.cpp
 panda/plugins/stringsearch/stringsearch.cpp
 panda/plugins/stringsearch/stringsearch.cpp
 panda/plugins/stringsearch/stringsearch.cpp
+panda/plugins/stringsearch/stringsearch.cpp
+panda/plugins/stringsearch/stringsearch.h
 panda/plugins/stringsearch/stringsearch.h
 panda/plugins/stringsearch/stringsearch.h
 panda/plugins/stringsearch/stringsearch.h
@@ -2521,6 +2593,8 @@ panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_enter.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_enter.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_enter.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_enter.cpp
+panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_enter.cpp
+panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_return.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_return.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_return.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_return.cpp
@@ -2531,6 +2605,8 @@ panda/plugins/syscalls2/gen_syscall_ppp_extern_enter.h
 panda/plugins/syscalls2/gen_syscall_ppp_extern_enter.h
 panda/plugins/syscalls2/gen_syscall_ppp_extern_enter.h
 panda/plugins/syscalls2/gen_syscall_ppp_extern_enter.h
+panda/plugins/syscalls2/gen_syscall_ppp_extern_enter.h
+panda/plugins/syscalls2/gen_syscall_ppp_extern_return.h
 panda/plugins/syscalls2/gen_syscall_ppp_extern_return.h
 panda/plugins/syscalls2/gen_syscall_ppp_extern_return.h
 panda/plugins/syscalls2/gen_syscall_ppp_extern_return.h
@@ -2541,6 +2617,8 @@ panda/plugins/syscalls2/gen_syscall_ppp_register_enter.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_register_enter.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_register_enter.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_register_enter.cpp
+panda/plugins/syscalls2/gen_syscall_ppp_register_enter.cpp
+panda/plugins/syscalls2/gen_syscall_ppp_register_return.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_register_return.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_register_return.cpp
 panda/plugins/syscalls2/gen_syscall_ppp_register_return.cpp
@@ -2551,6 +2629,8 @@ panda/plugins/syscalls2/gen_syscall_switch_enter_linux_arm.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_linux_arm.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_linux_arm.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_linux_arm.cpp
+panda/plugins/syscalls2/gen_syscall_switch_enter_linux_arm.cpp
+panda/plugins/syscalls2/gen_syscall_switch_enter_linux_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_linux_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_linux_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_linux_x86.cpp
@@ -2561,6 +2641,8 @@ panda/plugins/syscalls2/gen_syscall_switch_enter_windows7_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windows7_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windows7_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windows7_x86.cpp
+panda/plugins/syscalls2/gen_syscall_switch_enter_windows7_x86.cpp
+panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp2_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp2_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp2_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp2_x86.cpp
@@ -2571,6 +2653,8 @@ panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp3_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp3_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp3_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp3_x86.cpp
+panda/plugins/syscalls2/gen_syscall_switch_enter_windowsxp_sp3_x86.cpp
+panda/plugins/syscalls2/gen_syscall_switch_return_linux_arm.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_linux_arm.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_linux_arm.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_linux_arm.cpp
@@ -2581,6 +2665,8 @@ panda/plugins/syscalls2/gen_syscall_switch_return_linux_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_linux_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_linux_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_linux_x86.cpp
+panda/plugins/syscalls2/gen_syscall_switch_return_linux_x86.cpp
+panda/plugins/syscalls2/gen_syscall_switch_return_windows7_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windows7_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windows7_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windows7_x86.cpp
@@ -2591,6 +2677,8 @@ panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp2_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp2_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp2_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp2_x86.cpp
+panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp2_x86.cpp
+panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp3_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp3_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp3_x86.cpp
 panda/plugins/syscalls2/gen_syscall_switch_return_windowsxp_sp3_x86.cpp
@@ -2601,6 +2689,8 @@ panda/plugins/syscalls2/gen_syscalls_ext_typedefs.h
 panda/plugins/syscalls2/gen_syscalls_ext_typedefs.h
 panda/plugins/syscalls2/gen_syscalls_ext_typedefs.h
 panda/plugins/syscalls2/gen_syscalls_ext_typedefs.h
+panda/plugins/syscalls2/gen_syscalls_ext_typedefs.h
+panda/plugins/syscalls2/syscalls2.cpp
 panda/plugins/syscalls2/syscalls2.cpp
 panda/plugins/syscalls2/syscalls2.cpp
 panda/plugins/syscalls2/syscalls2.cpp
@@ -2611,6 +2701,8 @@ panda/plugins/syscalls2/syscalls2.h
 panda/plugins/syscalls2/syscalls2.h
 panda/plugins/syscalls2/syscalls2.h
 panda/plugins/syscalls2/syscalls2.h
+panda/plugins/syscalls2/syscalls2.h
+panda/plugins/syscalls2/syscalls_common.h
 panda/plugins/syscalls2/syscalls_common.h
 panda/plugins/syscalls2/syscalls_common.h
 panda/plugins/syscalls2/syscalls_common.h
@@ -2621,10 +2713,15 @@ panda/plugins/sysevent/sysevent.cpp
 panda/plugins/sysevent/sysevent.cpp
 panda/plugins/sysevent/sysevent.cpp
 panda/plugins/sysevent/sysevent.cpp
+panda/plugins/sysevent/sysevent.cpp
 panda/plugins/sysevent/sysevent.h
 panda/plugins/sysevent/sysevent.h
 panda/plugins/sysevent/sysevent.h
 panda/plugins/sysevent/sysevent.h
+panda/plugins/sysevent/sysevent.h
+panda/plugins/sysrecstarter/Makefile
+panda/plugins/sysrecstarter/sysrecstarter.cpp
+panda/plugins/systaint/callmemaccesstracker.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp
@@ -2635,6 +2732,8 @@ panda/plugins/systaint/logging.cpp
 panda/plugins/systaint/logging.cpp
 panda/plugins/systaint/logging.cpp
 panda/plugins/systaint/logging.cpp
+panda/plugins/systaint/logging.cpp
+panda/plugins/systaint/logging.hpp
 panda/plugins/systaint/logging.hpp
 panda/plugins/systaint/logging.hpp
 panda/plugins/systaint/logging.hpp
@@ -2643,6 +2742,8 @@ panda/plugins/systaint/logging.hpp
 panda/plugins/systaint/syscall_listener.cpp
 panda/plugins/systaint/syscall_listener.cpp
 panda/plugins/systaint/syscall_listener.cpp
+panda/plugins/systaint/syscall_listener.cpp
+panda/plugins/systaint/syscall_listener.hpp
 panda/plugins/systaint/syscall_listener.hpp
 panda/plugins/systaint/syscall_listener.hpp
 panda/plugins/systaint/syscall_listener.hpp
@@ -2655,6 +2756,8 @@ panda/plugins/systaint/systaint.cpp
 panda/plugins/systaint/systaint.cpp
 panda/plugins/systaint/systaint.cpp
 panda/plugins/systaint/systaint.cpp
+panda/plugins/systaint/systaint.cpp
+panda/plugins/systaint/systaint.hpp
 panda/plugins/systaint/systaint.hpp
 panda/plugins/systaint/systaint.hpp
 panda/plugins/systaint/systaint.hpp
@@ -2668,6 +2771,8 @@ panda/plugins/taint2/fast_shad.cpp
 panda/plugins/taint2/fast_shad.cpp
 panda/plugins/taint2/fast_shad.cpp
 panda/plugins/taint2/fast_shad.cpp
+panda/plugins/taint2/fast_shad.cpp
+panda/plugins/taint2/fast_shad.h
 panda/plugins/taint2/fast_shad.h
 panda/plugins/taint2/fast_shad.h
 panda/plugins/taint2/fast_shad.h
@@ -2678,6 +2783,8 @@ panda/plugins/taint2/label_set.cpp
 panda/plugins/taint2/label_set.cpp
 panda/plugins/taint2/label_set.cpp
 panda/plugins/taint2/label_set.cpp
+panda/plugins/taint2/label_set.cpp
+panda/plugins/taint2/label_set.h
 panda/plugins/taint2/label_set.h
 panda/plugins/taint2/label_set.h
 panda/plugins/taint2/label_set.h
@@ -2688,6 +2795,8 @@ panda/plugins/taint2/llvm_taint_lib.cpp
 panda/plugins/taint2/llvm_taint_lib.cpp
 panda/plugins/taint2/llvm_taint_lib.cpp
 panda/plugins/taint2/llvm_taint_lib.cpp
+panda/plugins/taint2/llvm_taint_lib.cpp
+panda/plugins/taint2/llvm_taint_lib.h
 panda/plugins/taint2/llvm_taint_lib.h
 panda/plugins/taint2/llvm_taint_lib.h
 panda/plugins/taint2/llvm_taint_lib.h
@@ -2698,6 +2807,8 @@ panda/plugins/taint2/my_mem.cpp
 panda/plugins/taint2/my_mem.cpp
 panda/plugins/taint2/my_mem.cpp
 panda/plugins/taint2/my_mem.cpp
+panda/plugins/taint2/my_mem.cpp
+panda/plugins/taint2/my_mem.h
 panda/plugins/taint2/my_mem.h
 panda/plugins/taint2/my_mem.h
 panda/plugins/taint2/my_mem.h
@@ -2708,6 +2819,8 @@ panda/plugins/taint2/panda_hypercall_struct.h
 panda/plugins/taint2/panda_hypercall_struct.h
 panda/plugins/taint2/panda_hypercall_struct.h
 panda/plugins/taint2/panda_hypercall_struct.h
+panda/plugins/taint2/panda_hypercall_struct.h
+panda/plugins/taint2/shad_dir.h
 panda/plugins/taint2/shad_dir.h
 panda/plugins/taint2/shad_dir.h
 panda/plugins/taint2/shad_dir.h
@@ -2718,6 +2831,8 @@ panda/plugins/taint2/shad_dir_32.cpp
 panda/plugins/taint2/shad_dir_32.cpp
 panda/plugins/taint2/shad_dir_32.cpp
 panda/plugins/taint2/shad_dir_32.cpp
+panda/plugins/taint2/shad_dir_32.cpp
+panda/plugins/taint2/shad_dir_32.h
 panda/plugins/taint2/shad_dir_32.h
 panda/plugins/taint2/shad_dir_32.h
 panda/plugins/taint2/shad_dir_32.h
@@ -2728,6 +2843,8 @@ panda/plugins/taint2/shad_dir_64.cpp
 panda/plugins/taint2/shad_dir_64.cpp
 panda/plugins/taint2/shad_dir_64.cpp
 panda/plugins/taint2/shad_dir_64.cpp
+panda/plugins/taint2/shad_dir_64.cpp
+panda/plugins/taint2/shad_dir_64.h
 panda/plugins/taint2/shad_dir_64.h
 panda/plugins/taint2/shad_dir_64.h
 panda/plugins/taint2/shad_dir_64.h
@@ -2738,6 +2855,8 @@ panda/plugins/taint2/taint2.cpp
 panda/plugins/taint2/taint2.cpp
 panda/plugins/taint2/taint2.cpp
 panda/plugins/taint2/taint2.cpp
+panda/plugins/taint2/taint2.cpp
+panda/plugins/taint2/taint2.h
 panda/plugins/taint2/taint2.h
 panda/plugins/taint2/taint2.h
 panda/plugins/taint2/taint2.h
@@ -2748,6 +2867,8 @@ panda/plugins/taint2/taint2_int.h
 panda/plugins/taint2/taint2_int.h
 panda/plugins/taint2/taint2_int.h
 panda/plugins/taint2/taint2_int.h
+panda/plugins/taint2/taint2_int.h
+panda/plugins/taint2/taint2_int_fns.h
 panda/plugins/taint2/taint2_int_fns.h
 panda/plugins/taint2/taint2_int_fns.h
 panda/plugins/taint2/taint2_int_fns.h
@@ -2758,6 +2879,8 @@ panda/plugins/taint2/taint_api.cpp
 panda/plugins/taint2/taint_api.cpp
 panda/plugins/taint2/taint_api.cpp
 panda/plugins/taint2/taint_api.cpp
+panda/plugins/taint2/taint_api.cpp
+panda/plugins/taint2/taint_api.h
 panda/plugins/taint2/taint_api.h
 panda/plugins/taint2/taint_api.h
 panda/plugins/taint2/taint_api.h
@@ -2768,6 +2891,8 @@ panda/plugins/taint2/taint_defines.h
 panda/plugins/taint2/taint_defines.h
 panda/plugins/taint2/taint_defines.h
 panda/plugins/taint2/taint_defines.h
+panda/plugins/taint2/taint_defines.h
+panda/plugins/taint2/taint_ops.cpp
 panda/plugins/taint2/taint_ops.cpp
 panda/plugins/taint2/taint_ops.cpp
 panda/plugins/taint2/taint_ops.cpp
@@ -2778,6 +2903,8 @@ panda/plugins/taint2/taint_ops.h
 panda/plugins/taint2/taint_ops.h
 panda/plugins/taint2/taint_ops.h
 panda/plugins/taint2/taint_ops.h
+panda/plugins/taint2/taint_ops.h
+panda/plugins/taint2/tests/full_system/hard_drive/linux_hd_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/linux_hd_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/linux_hd_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/linux_hd_test.c
@@ -2788,6 +2915,8 @@ panda/plugins/taint2/tests/full_system/hard_drive/pipes_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/pipes_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/pipes_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/pipes_ipc_test.c
+panda/plugins/taint2/tests/full_system/hard_drive/pipes_ipc_test.c
+panda/plugins/taint2/tests/full_system/hard_drive/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/socket_client_ipc_test.c
@@ -2798,6 +2927,8 @@ panda/plugins/taint2/tests/full_system/hard_drive/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/hard_drive/socket_server_ipc_test.c
+panda/plugins/taint2/tests/full_system/hard_drive/socket_server_ipc_test.c
+panda/plugins/taint2/tests/full_system/memory/pipes_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/pipes_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/pipes_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/pipes_ipc_test.c
@@ -2808,6 +2939,8 @@ panda/plugins/taint2/tests/full_system/memory/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/socket_client_ipc_test.c
+panda/plugins/taint2/tests/full_system/memory/socket_client_ipc_test.c
+panda/plugins/taint2/tests/full_system/memory/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/memory/socket_server_ipc_test.c
@@ -2818,6 +2951,8 @@ panda/plugins/taint2/tests/full_system/memory/windowsIPC/panda_mark.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/panda_mark.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/panda_mark.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/panda_mark.h
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/panda_mark.h
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx.cpp
@@ -2828,6 +2963,8 @@ panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx.h
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/stdafx.h
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/targetver.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/targetver.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/targetver.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/targetver.h
@@ -2838,6 +2975,8 @@ panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/window
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/windowsIPCclient.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/windowsIPCclient.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/windowsIPCclient.cpp
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCclient/windowsIPCclient.cpp
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx.cpp
@@ -2848,6 +2987,8 @@ panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx.h
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/stdafx.h
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/targetver.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/targetver.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/targetver.h
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/targetver.h
@@ -2858,6 +2999,8 @@ panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/window
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/windowsIPCserver.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/windowsIPCserver.cpp
 panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/windowsIPCserver.cpp
+panda/plugins/taint2/tests/full_system/memory/windowsIPC/windowsIPCserver/windowsIPCserver.cpp
+panda/plugins/taint2/tests/full_system/network/query_receive/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_receive/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_receive/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_receive/socket_client_ipc_test.c
@@ -2868,6 +3011,8 @@ panda/plugins/taint2/tests/full_system/network/query_receive/socket_server_ipc_t
 panda/plugins/taint2/tests/full_system/network/query_receive/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_receive/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_receive/socket_server_ipc_test.c
+panda/plugins/taint2/tests/full_system/network/query_receive/socket_server_ipc_test.c
+panda/plugins/taint2/tests/full_system/network/query_send/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_send/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_send/socket_client_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_send/socket_client_ipc_test.c
@@ -2878,6 +3023,8 @@ panda/plugins/taint2/tests/full_system/network/query_send/socket_server_ipc_test
 panda/plugins/taint2/tests/full_system/network/query_send/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_send/socket_server_ipc_test.c
 panda/plugins/taint2/tests/full_system/network/query_send/socket_server_ipc_test.c
+panda/plugins/taint2/tests/full_system/network/query_send/socket_server_ipc_test.c
+panda/plugins/taint2/tests/include/gcc/panda_mark.h
 panda/plugins/taint2/tests/include/gcc/panda_mark.h
 panda/plugins/taint2/tests/include/gcc/panda_mark.h
 panda/plugins/taint2/tests/include/gcc/panda_mark.h
@@ -2888,6 +3035,8 @@ panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.c
 panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.c
 panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.c
 panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.c
+panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.c
+panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.h
 panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.h
 panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.h
 panda/plugins/taint2/tests/user_mode/aes_test/AES/aes.h
@@ -2898,6 +3047,8 @@ panda/plugins/taint2/tests/user_mode/aes_test/aestool.c
 panda/plugins/taint2/tests/user_mode/aes_test/aestool.c
 panda/plugins/taint2/tests/user_mode/aes_test/aestool.c
 panda/plugins/taint2/tests/user_mode/aes_test/aestool.c
+panda/plugins/taint2/tests/user_mode/aes_test/aestool.c
+panda/plugins/taint2/tests/user_mode/binary_float_test.cpp
 panda/plugins/taint2/tests/user_mode/binary_float_test.cpp
 panda/plugins/taint2/tests/user_mode/binary_float_test.cpp
 panda/plugins/taint2/tests/user_mode/binary_float_test.cpp
@@ -2908,6 +3059,8 @@ panda/plugins/taint2/tests/user_mode/float_test.cpp
 panda/plugins/taint2/tests/user_mode/float_test.cpp
 panda/plugins/taint2/tests/user_mode/float_test.cpp
 panda/plugins/taint2/tests/user_mode/float_test.cpp
+panda/plugins/taint2/tests/user_mode/float_test.cpp
+panda/plugins/taint2/tests/user_mode/int_test.cpp
 panda/plugins/taint2/tests/user_mode/int_test.cpp
 panda/plugins/taint2/tests/user_mode/int_test.cpp
 panda/plugins/taint2/tests/user_mode/int_test.cpp
@@ -2918,6 +3071,8 @@ panda/plugins/taint2/tests/user_mode/label_query_test.cpp
 panda/plugins/taint2/tests/user_mode/label_query_test.cpp
 panda/plugins/taint2/tests/user_mode/label_query_test.cpp
 panda/plugins/taint2/tests/user_mode/label_query_test.cpp
+panda/plugins/taint2/tests/user_mode/label_query_test.cpp
+panda/plugins/taint2/tests/user_mode/read_copy_write_test.c
 panda/plugins/taint2/tests/user_mode/read_copy_write_test.c
 panda/plugins/taint2/tests/user_mode/read_copy_write_test.c
 panda/plugins/taint2/tests/user_mode/read_copy_write_test.c
@@ -2928,6 +3083,8 @@ panda/plugins/taint2/tests/user_mode/write_binary_float.c
 panda/plugins/taint2/tests/user_mode/write_binary_float.c
 panda/plugins/taint2/tests/user_mode/write_binary_float.c
 panda/plugins/taint2/tests/user_mode/write_binary_float.c
+panda/plugins/taint2/tests/user_mode/write_binary_float.c
+panda/plugins/tainted_branch/tainted_branch.cpp
 panda/plugins/tainted_branch/tainted_branch.cpp
 panda/plugins/tainted_branch/tainted_branch.cpp
 panda/plugins/tainted_branch/tainted_branch.cpp
@@ -2938,6 +3095,8 @@ panda/plugins/tainted_instr/tainted_instr.cpp
 panda/plugins/tainted_instr/tainted_instr.cpp
 panda/plugins/tainted_instr/tainted_instr.cpp
 panda/plugins/tainted_instr/tainted_instr.cpp
+panda/plugins/tainted_instr/tainted_instr.cpp
+panda/plugins/tstringsearch/tstringsearch.cpp
 panda/plugins/tstringsearch/tstringsearch.cpp
 panda/plugins/tstringsearch/tstringsearch.cpp
 panda/plugins/tstringsearch/tstringsearch.cpp
@@ -2948,6 +3107,8 @@ panda/plugins/win7x86intro/win7x86intro.cpp
 panda/plugins/win7x86intro/win7x86intro.cpp
 panda/plugins/win7x86intro/win7x86intro.cpp
 panda/plugins/win7x86intro/win7x86intro.cpp
+panda/plugins/win7x86intro/win7x86intro.cpp
+panda/plugins/wintrospection/wintrospection.c
 panda/plugins/wintrospection/wintrospection.c
 panda/plugins/wintrospection/wintrospection.c
 panda/plugins/wintrospection/wintrospection.c
@@ -2958,11 +3119,14 @@ panda/plugins/wintrospection/wintrospection.h
 panda/plugins/wintrospection/wintrospection.h
 panda/plugins/wintrospection/wintrospection.h
 panda/plugins/wintrospection/wintrospection.h
+panda/plugins/wintrospection/wintrospection.h
 panda/plugins/wintrospection/wintrospection_int.h
 panda/plugins/wintrospection/wintrospection_int.h
 panda/plugins/wintrospection/wintrospection_int.h
 panda/plugins/wintrospection/wintrospection_int.h
 panda/plugins/wintrospection/wintrospection_int.h
+panda/plugins/wintrospection/wintrospection_int.h
+panda/plugins/wintrospection/wintrospection_int_fns.h
 panda/plugins/wintrospection/wintrospection_int_fns.h
 panda/plugins/wintrospection/wintrospection_int_fns.h
 panda/plugins/wintrospection/wintrospection_int_fns.h
@@ -2974,6 +3138,7 @@ panda/src/callbacks.c
 panda/src/callbacks.c
 panda/src/common.c
 panda/src/common.c
+panda/src/plog-cc.cpp
 panda/src/plog.c
 panda/src/plog.c
 panda/src/plog_no_rr.c
