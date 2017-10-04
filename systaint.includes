@@ -218,9 +218,9 @@ tests/tcg/mips/mips64-dsp
 tests/tcg/mips/mips64-dspr2
 trace
 ui
-../panda_build/build/i386-softmmu/panda/plugins/
-../panda_build/build/i386-softmmu/
-../panda_build/build/
+build/i386-softmmu/panda/plugins/
+build/i386-softmmu/
+build/
 panda/plugins/systaint
 /usr/include/glib-2.0/
 /usr/lib/x86_64-linux-gnu/glib-2.0/include/

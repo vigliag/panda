@@ -1,9 +1,9 @@
-#ifndef CALLMEMACCESSTRACKER_HPP
-#define CALLMEMACCESSTRACKER_HPP
+#pragma once
 
 #include <map>
 #include <unordered_set>
 #include <cstdint>
+#include <sstream>
 
 class CallMemAccessTracker
 {
@@ -38,4 +38,47 @@ public:
     }
 };
 
-#endif // CALLMEMACCESSTRACKER_HPP
+/**
+ * FullyQualified Thread ID, made of asid, thread_id
+ **/
+using FQThreadId = std::pair<uint32_t, uint32_t>;
+
+enum class EventKind {
+  unknown=0,
+  syscall,
+  encoding,
+  external
+};
+
+struct Event {
+    CallMemAccessTracker memory;
+    uint64_t started = 0;
+    uint64_t ended = 0;
+    uint32_t ret_addr = 0;
+    uint32_t entrypoint = 0;
+    uint32_t label = 0;
+    FQThreadId thread;
+    EventKind kind = EventKind::unknown;
+
+    std::string toString() const {
+        std::stringstream res;
+        res << "Event: ";
+        switch(kind){
+        case EventKind::syscall:
+            res << "syscall "; break;
+        case EventKind::encoding:
+            res << "encoding "; break;
+        case EventKind::external:
+            res << "external "; break;
+        case EventKind::unknown:
+            res << "unknown "; break;
+        }
+        res << "id " << entrypoint << " started " << started;
+        return res.str();
+    }
+
+    uint32_t getLabel() const {
+        if(label) return label;
+        else return started;
+    }
+};

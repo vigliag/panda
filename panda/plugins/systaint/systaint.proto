@@ -1,14 +1,17 @@
 message SysMemoryLocation {
    required uint32 address = 1;
    required uint32 value = 2;
-   repeated uint32 dependencies = 3;
+   repeated uint32 dependencies = 3 [packed=true];
 }
 
 message SysFnCall {
    required uint32 entrypoint = 1;
-   required uint32 callid = 2;
-   repeated SysMemoryLocation reads = 3;
-   repeated SysMemoryLocation writes = 4;
+   required uint64 started = 2;
+   required uint64 ended = 3;
+   required uint32 kind = 4;
+
+   repeated SysMemoryLocation reads = 5;
+   repeated SysMemoryLocation writes = 6;
 }
 
 optional SysFnCall encfncall = 57;

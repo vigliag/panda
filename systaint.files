@@ -2629,7 +2629,9 @@ panda/plugins/systaint/callmemaccesstracker.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp
-panda/plugins/systaint/callmemaccesstracker.hpp
+panda/plugins/systaint/event.hpp
+panda/plugins/systaint/introspection.cpp
+panda/plugins/systaint/introspection.hpp
 panda/plugins/systaint/logging.cpp
 panda/plugins/systaint/logging.cpp
 panda/plugins/systaint/logging.cpp

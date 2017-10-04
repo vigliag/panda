@@ -1,8 +1,8 @@
 #ifndef PANDALOGGING_HPP
 #define PANDALOGGING_HPP
 
-#include "callmemaccesstracker.hpp"
+#include "event.hpp"
 
-void logSysFnCall(uint64_t callid, uint64_t entrypoint, CallMemAccessTracker& cmt, FILE* outfile);
+void logEvent(const Event& event, FILE* outfile);
 
 #endif // PANDALOGGING_HPP

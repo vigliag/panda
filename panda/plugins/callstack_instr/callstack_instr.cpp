@@ -18,6 +18,7 @@ PANDAENDCOMMENT */
 #include <cmath>
 
 #include <map>
+#include <unordered_map>
 #include <set>
 #include <vector>
 #include <algorithm>
@@ -82,7 +83,7 @@ typedef std::pair<target_ulong,target_ulong> stackid;
 std::map<stackid, std::vector<stack_entry>> callstacks;
 
 // EIP -> instr_type
-std::map<target_ulong, instr_type> call_cache;
+std::unordered_map<target_ulong, instr_type> call_cache;
 
 /* Helpers */
 
@@ -122,13 +123,13 @@ StackidStrategy stackid_strategy = ASID;
  * Only works in user-space, where the FS segment points to the TIB
  * @see https://en.wikipedia.org/wiki/Win32_Thread_Information_Block
  */
-target_ulong getThreadID(CPUState* cpu){
+uint32_t getThreadID(CPUState* cpu){
 #ifdef TARGET_I386
     assert(!panda_in_kernel(cpu));
 
     CPUArchState *env = (CPUArchState*)cpu->env_ptr;
-    target_ulong tib_address = env->segs[R_FS].base;
-    target_ulong curr_thread_id_address = tib_address + 0x24;
+    uint32_t tib_address = env->segs[R_FS].base;
+    uint32_t curr_thread_id_address = tib_address + 0x24;
 
     uint32_t curr_thread_id;
     panda_virtual_memory_read(cpu, curr_thread_id_address, (uint8_t*)(&curr_thread_id), 4);

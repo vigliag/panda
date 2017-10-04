@@ -222,6 +222,10 @@ void taint2_labelset_spit(LabelSetP ls) {
     printf("\n");
 }
 
+LabelSetP taint2_labelset_addr_query(Addr a){
+    return tp_labelset_get(a);
+}
+
 void taint2_labelset_iter(LabelSetP ls,  int (*app)(uint32_t el, void *stuff1), void *stuff2) {
     tp_ls_iter(ls, app, stuff2);
 }

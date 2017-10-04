@@ -43,6 +43,9 @@ void taint2_delete_reg(int reg_num, int offset);
 // spit labelset.
 void taint2_labelset_spit(LabelSetP ls) ; 
 
+// returns the labelset corresponding to a given address
+LabelSetP taint2_labelset_addr_query(Addr a);
+
 // addr is an opaque.  it should be &a if a is known to be an Addr
 void taint2_labelset_addr_iter(Addr addr, int (*app)(uint32_t el, void *stuff1), void *stuff2);
 
