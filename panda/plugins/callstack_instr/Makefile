@@ -3,6 +3,7 @@
 # If you need custom CFLAGS or LIBS, set them up here
 # -DUSE_STACK_HEURISTIC tries to detect thread switches by sudden
 # jumps in the stack pointer
+CFLAGS+= -O2
 LIBS+=-lcapstone
 
 # The main rule for your plugin. List all object-file dependencies.

@@ -85,4 +85,3 @@ Panda__TaintQuery *taint2_query_pandalog (Addr addr, uint32_t offset);
 void pandalog_taint_query_free(Panda__TaintQuery *tq);
 
 #endif
-

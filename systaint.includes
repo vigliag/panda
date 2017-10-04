@@ -257,5 +257,3 @@ panda/src
 panda/llvm
 panda/src/rr
 
-panda/plugins/checkpoint_test
-panda/plugins/sysrecstarter
