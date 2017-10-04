@@ -559,6 +559,7 @@ Dwarf_Unsigned get_struct_member_offset(Dwarf_Die the_die) {
     Dwarf_Error err;
     Dwarf_Bool hasLocation;
     Dwarf_Attribute locationAttr;
+    Dwarf_Half attrform;
     Dwarf_Locdesc **locdesclist = NULL;
     Dwarf_Signed loccnt = 0;
 
@@ -569,6 +570,19 @@ Dwarf_Unsigned get_struct_member_offset(Dwarf_Die the_die) {
             die("Error obtaining location attr\n");
         // dwarf_formexprloc(attr, expr_len, block_ptr, &err);
         else if (dwarf_loclist_n(locationAttr, &locdesclist, &loccnt, &err) != DW_DLV_OK){
+            dwarf_whatform(locationAttr, &attrform, &err);
+            //die("DEBUG Whatform %x\n", attrform);
+            if (dwarf_whatform(locationAttr, &attrform, &err) == DW_DLV_OK
+               && (attrform == DW_FORM_data1 
+                   || attrform == DW_FORM_data2
+                   || attrform == DW_FORM_data4
+                   || attrform == DW_FORM_data8))
+            {
+                //die("DEBUG attr form %d\n", attrform);
+                Dwarf_Unsigned result = 0;
+                dwarf_formudata(locationAttr, &result, 0);
+                return result;
+            }
             char *die_name = 0;
             if (dwarf_diename(the_die, &die_name, &err) != DW_DLV_OK){
                 die("Not able to get location list for var without a name.  Probably optimized out\n");
@@ -683,6 +697,7 @@ int die_get_type_size (Dwarf_Debug dbg, Dwarf_Die the_die){
                     return -1;
                 // continue enumerating type to get actual type
                 // just "skip" these types by continuing to descend type tree
+                case DW_TAG_restrict_type:
                 case DW_TAG_typedef:
                 case DW_TAG_volatile_type:
                 case DW_TAG_const_type:
@@ -766,7 +781,8 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
            tag == DW_TAG_typedef       ||
            tag == DW_TAG_array_type    ||
            tag == DW_TAG_volatile_type ||
-           tag == DW_TAG_const_type)
+           tag == DW_TAG_const_type    ||
+           tag == DW_TAG_restrict_type)
     {
         rc = dwarf_attr (cur_die, DW_AT_type, &type_attr, &err);
         if (rc == DW_DLV_ERROR){
@@ -817,6 +833,17 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
                         char *field_name;
                         while (1) // enumerate struct arguments
                         {
+                            do {
+                            Dwarf_Bool hasLocation;
+                            if (dwarf_hasattr(struct_child, DW_AT_bit_size, &hasLocation, &err) != DW_DLV_OK)
+                                die("Error determining bitsize attr\n");
+                            else if (hasLocation)
+                                break;
+                            if (dwarf_hasattr(struct_child, DW_AT_bit_offset, &hasLocation, &err) != DW_DLV_OK)
+                                die("Error determining bitoffset attr\n");
+                            else if (hasLocation)
+                                break;
+
                             rc = dwarf_diename(struct_child, &field_name, &err);
                             struct_offset = get_struct_member_offset(struct_child);
                             if (rc != DW_DLV_OK){
@@ -826,6 +853,8 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
                             //printf(" struct: %s, offset: %llu\n", temp_name.c_str(), struct_offset);
                             __dwarf_type_iter(cpu, cur_base_addr + struct_offset, loc_t, dbg,
                                            struct_child, temp_name, cb, recursion_level - 1);
+                            } while (0);
+
                             rc = dwarf_siblingof(dbg, struct_child, &struct_child, &err);
                             if (rc == DW_DLV_ERROR) {
                                 die("Struct: Error getting sibling of DIE\n");
@@ -899,6 +928,7 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
                         if (rc == DW_DLV_OK){
                             if (0 == strcmp("unsigned char", die_name) ||
                                 0 == strcmp("char", die_name) ||
+                                0 == strcmp("u_char", die_name) ||
                                 0 == strcmp("signed char", die_name)){
                                 if (debug)
                                     printf("Querying: char-type %s  %s\n", die_name, cur_astnodename.c_str());
@@ -961,6 +991,7 @@ void __dwarf_type_iter (CPUState *cpu, target_ulong base_addr, LocType loc_t,
                     break;
                 // continue enumerating type to get actual type
                 case DW_TAG_typedef:
+                case DW_TAG_restrict_type:
                 // just "skip" these types by continuing to descend type tree
                 case DW_TAG_volatile_type:
                 case DW_TAG_const_type:
@@ -1010,7 +1041,8 @@ const char *dwarf_type_to_string ( DwarfVarType *var_ty ){
            tag == DW_TAG_typedef       ||
            tag == DW_TAG_array_type    ||
            tag == DW_TAG_volatile_type ||
-           tag == DW_TAG_const_type)
+           tag == DW_TAG_const_type    ||
+           tag == DW_TAG_restrict_type)
     {
         rc = dwarf_attr (cur_die, DW_AT_type, &type_attr, &err);
         if (rc == DW_DLV_ERROR){
@@ -1049,7 +1081,7 @@ const char *dwarf_type_to_string ( DwarfVarType *var_ty ){
                     if (dwarf_child(type_die, &struct_child, &err) != DW_DLV_OK)
                     {
                         //printf("  Couldn't parse struct for var: %s\n",argname.c_str() );
-                        return type_name.c_str();
+                        return strdup(type_name.c_str());
                     }
                     char *field_name;
                     while (1) // enumerate struct arguments
@@ -1065,7 +1097,7 @@ const char *dwarf_type_to_string ( DwarfVarType *var_ty ){
 
                         rc = dwarf_diename(struct_child, &field_name, &err);
                         if (rc != DW_DLV_OK)
-                            strncpy(field_name, "?\0", 2);
+                            field_name = (char *)std::string("?").c_str();
                         //printf("    [+] %s\n", field_name);
                     }
                     break;
@@ -1097,6 +1129,7 @@ const char *dwarf_type_to_string ( DwarfVarType *var_ty ){
                     break;
                 // just "skip" these types by continuing to descend type tree
                 case DW_TAG_typedef: // continue enumerating type to get actual type
+                case DW_TAG_restrict_type:
                 case DW_TAG_ptr_to_member_type: // what to do here?
                 case DW_TAG_imported_declaration:
                 case DW_TAG_unspecified_parameters:
@@ -1198,6 +1231,7 @@ void load_func_from_die(Dwarf_Debug *dbg, Dwarf_Die the_die,
     Dwarf_Error err;
     Dwarf_Half tag;
     Dwarf_Attribute* attrs;
+    Dwarf_Half attrform;
     Dwarf_Addr lowpc = 0, highpc = 0;
     Dwarf_Signed attrcount, i;
     Dwarf_Locdesc **locdesclist;
@@ -1229,6 +1263,8 @@ void load_func_from_die(Dwarf_Debug *dbg, Dwarf_Die the_die,
         Dwarf_Half attrcode;
         if (dwarf_whatattr(attrs[i], &attrcode, &err) != DW_DLV_OK)
             die("Error in dwarf_whatattr\n");
+        if (dwarf_whatform(attrs[i], &attrform, &err) != DW_DLV_OK)
+            die("Error in dwarf_whatform\n");
 
         /* We only take some of the attributes for display here.
         ** More can be picked with appropriate tag constants.
@@ -1247,18 +1283,25 @@ void load_func_from_die(Dwarf_Debug *dbg, Dwarf_Die the_die,
             Dwarf_Half offset_size = 0;
             int wres = 0;
 
-            get_form_values(attrs[i],&theform,&directform);
-            wres = dwarf_get_version_of_die(the_die,&version,&offset_size);
-            if (wres != DW_DLV_OK) {
-                die("Cannot get DIE context version number");
-                break;
-            }
-            fc = dwarf_get_form_class(version,attrcode,offset_size,theform);
-            if (DW_DLV_OK != dwarf_formaddr(attrs[i], &highpc, &err)) {
-                printf("Was not able to process function [%s].  Error in getting highpc\n", die_name);
-            }
-            if (fc == DW_FORM_CLASS_CONSTANT) {
+            dwarf_formaddr(attrs[i], &highpc, &err);
+            if (attrform == DW_FORM_data4)
+            {
+                dwarf_formudata(attrs[i], &highpc, 0);
                 highpc += lowpc;
+            } else {
+                get_form_values(attrs[i],&theform,&directform);
+                wres = dwarf_get_version_of_die(the_die,&version,&offset_size);
+                if (wres != DW_DLV_OK) {
+                    die("Cannot get DIE context version number");
+                    break;
+                }
+                fc = dwarf_get_form_class(version,attrcode,offset_size,theform);
+                if (DW_DLV_OK != dwarf_formaddr(attrs[i], &highpc, &err)) {
+                    printf("Was not able to process function [%s].  Error in getting highpc\n", die_name);
+                }
+                if (fc == DW_FORM_CLASS_CONSTANT) {
+                    highpc += lowpc;
+                }
             }
 
             found_highpc = true;
