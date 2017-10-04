@@ -133,11 +133,14 @@ int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, std::functio
     }
 
     for(uint64_t i=0; i< size; i++){
-        LabelSetP ls = taint2_labelset_addr_query(make_maddr(abs_addr+i));
+        uint64_t addr = abs_addr+i;
+        uint32_t nlabels = taint2_query_ram(addr);
 
-        if(!ls) continue;
+        if(!nlabels) continue;
+        vector<uint32_t> labels(nlabels);
+        taint2_query_set_ram(addr, labels.data());
 
-        for(uint32_t label : *ls){
+        for(uint32_t label : labels){
             callback(addr + i, label);
         }
     }
@@ -203,7 +206,7 @@ void onSysEnter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     cout << "Tainting syscall args with " << taint_label << endl ;
     for(std::size_t i=0; i<arg_len; i++){
         taint2_delete_ram(arg_start_pa + i);
-        taint2_label_ram(arg_start_pa + i, taint_label);
+        taint2_label_ram_additive(arg_start_pa + i, taint_label);
     }*/
     //cout << "done" << endl;
 }
@@ -223,7 +226,7 @@ void onEventEnd(CPUState* cpu, FQThreadId thread){
         if(write_pa == -1){
             cout << "ERROR panda_virt_to_phys errored while labeling " << addr_data.first << " with " << event->getLabel() << endl;
         } else {
-            if(!no_llvm) taint2_label_ram(write_pa, event->getLabel());
+            if(!no_llvm) taint2_label_ram_additive(write_pa, event->getLabel());
         }
     }
 
