@@ -9,6 +9,7 @@ extern "C" {
 #include <unordered_map>
 #include <cstdio>
 #include <unordered_set>
+#include <iostream>
 
 using namespace std;
 
@@ -43,7 +44,6 @@ void logEvent(const Event& event, FILE* filepointer){
 
     int i = 0;
     for(const auto& addr_value : event.memory.readset){
-
         reads[i] = PANDA__SYS_MEMORY_LOCATION__INIT;
         reads[i].n_dependencies = depsetAry[addr_value.first].size();
         reads[i].dependencies = &(depsetAry[addr_value.first][0]);
@@ -77,6 +77,7 @@ void logEvent(const Event& event, FILE* filepointer){
         pandalog_write_entry(&ple);
 
     } else {
+        assert(filepointer);
 
         // Write to filepointer, prepended by the buffer's size
         uint64_t buffer_size = panda__sys_fn_call__get_packed_size(&pbEvent);

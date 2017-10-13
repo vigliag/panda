@@ -2,6 +2,8 @@
 * This plugin listens for hypercalls and emits SYSENTER/SYSEXIT events
 */
 
+// DEPRECATED IN FAVOR OF SYSEVENT
+
 #include "panda/plugin.h"
 #include <iostream>
 #include <fstream>

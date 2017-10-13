@@ -38,52 +38,15 @@ int guest_hypercall_callback(CPUState *cpu);
 #include <functional>
 #include <memory>
 
-using namespace std;
-
 #include "event.hpp"
 #include "logging.hpp"
 #include "introspection.hpp"
 
-// A dependencySet is a set of events ids
-using dependencySet = std::unordered_set<uint32_t>;
-
-// Map to each event to its dependencies
-static std::map<uint32_t, dependencySet> eventDependencies;
-
-Addr make_maddr(uint64_t a) {
-    Addr ma;
-    ma.typ = MADDR;
-    ma.val.ma = a;
-    ma.off = 0;
-    ma.flag = (AddrFlag) 0;
-    return ma;
-}
-
-#ifdef TARGET_I386
-
-
-// ARGS:
-//////////////////
-
-// whether we want to run without LLVM and taint analysis
-static bool no_llvm = false;
-
-// filename where to print the function call data we collect
-static const char* outfile = nullptr;
-
-
-// Globals:
-//////////////
-
-// Opened filepointer for writing collected function data
-static FILE* outfp = nullptr;
-
-std::set<uint32_t> monitored_processes;
-std::set<uint32_t> monitored_encoding_calls;
-
-static FQThreadId getFQThreadId(CPUState* cpu){
-    return std::make_pair(panda_current_asid(cpu), get_current_thread_id(cpu));
-}
+using namespace std;
+using EventID = uint32_t;
+using Asid = target_ulong;
+using Address = target_ulong;
+using dependencySet = std::unordered_set<EventID>;
 
 class EventTracker {
     std::map<FQThreadId, shared_ptr<Event>> curr_event;
@@ -99,8 +62,39 @@ public:
     }
 };
 
+
+static std::map<EventID, dependencySet> eventDependencies;
+
+#ifdef TARGET_I386
+
+// ARGS:
+//////////////////
+
+// whether we want to run without LLVM and taint analysis
+static bool no_llvm = false;
+
+// filename where to print the function call data we collect
+static const char* outfile = nullptr;
+
+static bool automatically_add_processes = false;
+
+//static bool fast= false;
+
+// Globals:
+//////////////
+
+// Opened filepointer for writing collected function data
+static FILE* outfp = nullptr;
+
+std::set<Asid> monitored_processes;
+static std::set<Address> monitored_encoding_calls;
+
+static FQThreadId getFQThreadId(CPUState* cpu){
+    return std::make_pair(panda_current_asid(cpu), get_current_thread_id(cpu));
+}
+
 // Event Tracker
-EventTracker events;
+static EventTracker events;
 
 /* Used as a callback to add new_label as a dependency to this_label
    uses global data structures */
@@ -133,15 +127,15 @@ int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, std::functio
     }
 
     for(uint64_t i=0; i< size; i++){
-        uint64_t addr = abs_addr+i;
-        uint32_t nlabels = taint2_query_ram(addr);
-
+        uint64_t abs_addr_i = abs_addr+i;
+        uint32_t nlabels = taint2_query_ram(abs_addr_i);
         if(!nlabels) continue;
+
         vector<uint32_t> labels(nlabels);
-        taint2_query_set_ram(addr, labels.data());
+        taint2_query_set_ram(abs_addr_i, labels.data());
 
         for(uint32_t label : labels){
-            callback(addr + i, label);
+            callback(static_cast<target_ulong>(addr + i), label);
         }
     }
 
@@ -225,12 +219,16 @@ void onEventEnd(CPUState* cpu, FQThreadId thread){
 
         if(write_pa == -1){
             cout << "ERROR panda_virt_to_phys errored while labeling " << addr_data.first << " with " << event->getLabel() << endl;
+            break;
         } else {
-            if(!no_llvm) taint2_label_ram_additive(write_pa, event->getLabel());
+            if(taint2_enabled()){
+                taint2_label_ram_additive(write_pa, event->getLabel());
+            }
         }
     }
 
     //logging
+    cout << "DEPS" << event->memory.readsetDeps.size() << endl;
     logEvent(*event, outfp);
     events.closeEvent(thread);
 }
@@ -267,6 +265,18 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
     assert(cpu);
     assert(event_label);
 
+    // Start tracking this process if not doing it already
+    target_ulong asid = panda_current_asid(cpu);
+
+    if(!monitored_processes.count(asid)){
+        if(automatically_add_processes){
+            cout << "TRACKING " << asid << " instcount " <<  rr_get_guest_instr_count() << endl;
+            monitored_processes.insert(asid);
+        } else {
+            return;
+        }
+    }
+
     FQThreadId thread = getFQThreadId(cpu);
 
     auto current_event = events.getEvent(thread);
@@ -286,13 +296,6 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
         cout << "EVENT ignored " << event_label << " instcount " <<  rr_get_guest_instr_count()<< " current " << current_event->toString() << endl;
     }
 
-    // Start tracking this process if not doing it already
-    target_ulong asid = panda_current_asid(cpu);
-    if(!monitored_processes.count(asid)){
-        cout << "TRACKING " << asid << " instcount " <<  rr_get_guest_instr_count() << endl;
-        monitored_processes.insert(asid);
-    }
-
     if (!taint2_enabled() && !no_llvm) {
         printf("enabling taint\n");
         taint2_enable_taint();
@@ -302,6 +305,11 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
 void systaint_event_exit(CPUState *cpu, uint32_t event_label){
     assert(cpu);
     assert(event_label);
+
+    target_ulong asid = panda_current_asid(cpu);
+    if(!monitored_processes.count(asid) && !automatically_add_processes){
+        return;
+    }
 
     auto thread = getFQThreadId(cpu);
     auto current_event = events.getEvent(thread);
@@ -329,11 +337,10 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         return;
     }
 
-    auto thread = getFQThreadId(cpu);
-    auto p_current_event = events.getEvent(thread);
-
-
     if(monitored_encoding_calls.count(entrypoint)){
+
+        auto thread = getFQThreadId(cpu);
+        auto p_current_event = events.getEvent(thread);
 
         if(p_current_event){
             cerr << "encoding call during existing event. This shouldn't happen. "
@@ -423,17 +430,46 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
 #endif // TARGET_I386
 
-FILE* taintchanges = nullptr;
+//FILE* taintchanges = nullptr;
 
-void on_taint_change (Addr ma, uint64_t size){
-    (void)size;
-    if(ma.typ == MADDR){
-        fprintf(taintchanges, "%p %u\n", (void*)ma.val.ma, taint2_query_ram(ma.val.ma));
-    };
+//void on_taint_change (Addr ma, uint64_t size){
+//    (void)size;
+//    if(ma.typ == MADDR){
+//        fprintf(taintchanges, "%p %u\n", (void*)ma.val.ma, taint2_query_ram(ma.val.ma));
+//    };
+//}
+
+
+std::set<target_ulong> parse_addr_list(const char* addrs){
+    std::set<target_ulong> res;
+    if(!addrs) return res;
+
+    char* arrt = strdup(addrs);
+
+    char* pch = strtok(arrt, " ,;_");
+    while (pch != NULL){
+        res.insert(static_cast<target_ulong>(std::stoul(pch, nullptr, 0)));
+        pch = strtok(NULL, " ,;_");
+    }
+
+    free(arrt);
+    return res;
 }
 
-void *plugin_self;
+/*int asid_changed_callback(CPUState* cpu, uint32_t oldasid, uint32_t newasid){
+    if(monitored_processes.count(newasid)){
+        if (!taint2_enabled() && !no_llvm) {
+            printf("enabling taint\n");
+            taint2_enable_taint();
+        }
+    } else {
+        if (taint2_enabled() && !no_llvm){
+            taint2_
+        }
+    }
+}*/
 
+void *plugin_self;
 bool init_plugin(void *self) {
  
 #ifdef TARGET_I386
@@ -452,13 +488,15 @@ bool init_plugin(void *self) {
     panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb);
     pcb.before_block_exec = returned_check_callback;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+    //pcb.asid_changed = asid_changed_callback;
+    //panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
 
     panda_require("taint2");
     assert(init_taint2_api());
-    PPP_REG_CB("taint2", on_taint_change, on_taint_change);
+//    PPP_REG_CB("taint2", on_taint_change, on_taint_change);
 
-    taintchanges = fopen("/tmp/taintchanges.log", "w");
-    assert(taintchanges);
+//    taintchanges = fopen("/tmp/taintchanges.log", "w");
+//    assert(taintchanges);
 
     panda_require("callstack_instr");
     assert(init_callstack_instr_api());
@@ -481,20 +519,41 @@ bool init_plugin(void *self) {
 
     panda_arg_list *args = panda_get_args("systaint");
     if (args != NULL) {
-        uint64_t tracked_asid = panda_parse_uint64_opt(args, "asid", 0, "asid to track");
-        uint64_t tracked_encoding_fn = panda_parse_uint64_opt(args, "encfn",  0, "encoding function to track");
-        monitored_processes.insert(tracked_asid);
-        monitored_encoding_calls.insert(tracked_encoding_fn);
+
+        const char* tracked_asids = panda_parse_string_opt(args, "asids", nullptr, "list of asids to track");
+        if(tracked_asids){
+            if(!strcmp(tracked_asids, "auto")){
+                automatically_add_processes = true;
+            } else {
+                monitored_processes = parse_addr_list(tracked_asids);
+            }
+        }
+
+        const char* tracked_encoding_fn = panda_parse_string_opt(args, "encfns", nullptr, "list of encoding function addresses");
+        if(tracked_encoding_fn)
+            monitored_encoding_calls = parse_addr_list(tracked_encoding_fn);
+
         no_llvm = panda_parse_bool_opt(args, "no_llvm", "disable llvm and tainting");
+        cout << "no_llvm " << no_llvm << endl;
+
+        //fast = panda_parse_bool_opt(args, "fast", "turn on and off taint when asid changes");
         outfile = panda_parse_string_opt(args, "outfile", nullptr, "an output file");
     }
 
     if(outfile){
         outfp = fopen(outfile, "w");
+        if(!outfp){
+            perror("unable to open output file");
+            exit(-1);
+        }
     }
 
     for(const auto&i : monitored_encoding_calls){
         cout << "tracking encfn " << i << endl;
+    }
+
+    for(const auto&i : monitored_processes){
+        cout << "tracking process " << i << endl;
     }
 
 #endif

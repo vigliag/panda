@@ -120,10 +120,11 @@ static void taint_storeEip_run(FastShad *shad, uint64_t src, uint64_t size) {
     PPP_RUN_CB(on_non_const_eip, a, size);
 }
 
+extern const char* qemu_file;
 extern "C" { extern TCGLLVMContext *tcg_llvm_ctx; }
 bool PandaTaintFunctionPass::doInitialization(Module &M) {
     // Add taint functions to module
-    char *exe = strdup(gargv[0]);
+    char *exe = strdup(qemu_file);
     std::string bitcode(dirname(exe));
     free(exe);
     bitcode.append("/panda/plugins/panda_taint2_ops.bc");
