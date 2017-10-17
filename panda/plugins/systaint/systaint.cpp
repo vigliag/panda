@@ -50,6 +50,7 @@ using dependencySet = std::unordered_set<EventID>;
 
 class EventTracker {
     std::map<FQThreadId, shared_ptr<Event>> curr_event;
+    std::map<FQThreadId, std::set<uint32_t>> curr_tags;
 public:
     std::shared_ptr<Event> getEvent(FQThreadId thread_id){
         return curr_event[thread_id];
@@ -77,8 +78,6 @@ static bool no_llvm = false;
 static const char* outfile = nullptr;
 
 static bool automatically_add_processes = false;
-
-//static bool fast= false;
 
 // Globals:
 //////////////
@@ -146,8 +145,7 @@ int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, std::functio
 
 /* When a sysenter is being executed, and we are about to jump in kernel-space.
 Note this is only executed for interesting asid (filtering has been done on translate_callback) */
-void onSysEnter(CPUState *cpu, const SyscallDef& sc, SysCall call){
-
+void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
 
     FQThreadId thread = getFQThreadId(cpu);
     auto current_event = events.getEvent(thread);
@@ -222,7 +220,7 @@ void onEventEnd(CPUState* cpu, FQThreadId thread){
             break;
         } else {
             if(taint2_enabled()){
-                taint2_label_ram_additive(write_pa, event->getLabel());
+                taint2_label_ram(write_pa, event->getLabel());
             }
         }
     }
@@ -234,7 +232,7 @@ void onEventEnd(CPUState* cpu, FQThreadId thread){
 }
 
 
-void onSysExit(CPUState *cpu, const SyscallDef& sc, SysCall call){
+void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
     FQThreadId thread = getFQThreadId(cpu);
     auto current_event = events.getEvent(thread);
 
@@ -272,6 +270,7 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
         if(automatically_add_processes){
             cout << "TRACKING " << asid << " instcount " <<  rr_get_guest_instr_count() << endl;
             monitored_processes.insert(asid);
+            panda_do_flush_tb();
         } else {
             return;
         }
@@ -480,14 +479,19 @@ bool init_plugin(void *self) {
 
     pcb.virt_mem_after_write = mem_write_callback;
     panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_WRITE, pcb);
+
     pcb.virt_mem_after_read = mem_read_callback;
     panda_register_callback(self, PANDA_CB_VIRT_MEM_AFTER_READ, pcb);
-    pcb.insn_translate = translate_callback;
+
+    pcb.insn_translate = sc_listener_translate_callback;
     panda_register_callback(self, PANDA_CB_INSN_TRANSLATE, pcb);
-    pcb.insn_exec = exec_callback;
+
+    pcb.insn_exec = sc_listener_exec_callback;
     panda_register_callback(self, PANDA_CB_INSN_EXEC, pcb);
-    pcb.before_block_exec = returned_check_callback;
+
+    pcb.before_block_exec = sc_listener_returned_check_callback;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+
     //pcb.asid_changed = asid_changed_callback;
     //panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
 
@@ -555,6 +559,10 @@ bool init_plugin(void *self) {
     for(const auto&i : monitored_processes){
         cout << "tracking process " << i << endl;
     }
+
+    panda_do_flush_tb();
+    panda_enable_precise_pc();
+    panda_enable_tb_chaining();
 
 #endif
 

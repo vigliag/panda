@@ -2721,6 +2721,7 @@ panda/plugins/sysevent/sysevent.h
 panda/plugins/sysevent/sysevent.h
 panda/plugins/sysrecstarter/Makefile
 panda/plugins/sysrecstarter/sysrecstarter.cpp
+panda/plugins/systaint/bufferinfo.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp
 panda/plugins/systaint/callmemaccesstracker.hpp

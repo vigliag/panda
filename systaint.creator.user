@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 4.4.0, 2017-10-13T11:11:59. -->
+<!-- Written by QtCreator 4.4.1, 2017-10-16T22:19:31. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -290,11 +290,11 @@
     </valuelist>
     <value type="int" key="PE.EnvironmentAspect.Base">2</value>
     <valuelist type="QVariantList" key="PE.EnvironmentAspect.Changes"/>
-    <value type="QString" key="ProjectExplorer.CustomExecutableRunConfiguration.Arguments">~/vms/win7_cuckoo.qcow2 -m 512M -netdev user,id=net1 -device rtl8139,netdev=net1,mac=02:29:07:29:9F:41 -replay sysrec -os windows-32-7 -panda 'systaint:outfile=outfl1,asids=auto'
+    <value type="QString" key="ProjectExplorer.CustomExecutableRunConfiguration.Arguments">~/vms/win7_cuckoo.qcow2 -m 512M -netdev user,id=net1 -device rtl8139,netdev=net1,mac=02:29:07:29:9F:41 -replay sysrec -os windows-32-7 -panda 'systaint:outfile=outfl1,asids=auto,no_llvm=true'
 </value>
     <value type="QString" key="ProjectExplorer.CustomExecutableRunConfiguration.Executable">/home/vigliag/thesis/panda/build/i386-softmmu/qemu-system-i386</value>
     <value type="bool" key="ProjectExplorer.CustomExecutableRunConfiguration.UseTerminal">true</value>
-    <value type="QString" key="ProjectExplorer.CustomExecutableRunConfiguration.WorkingDirectory">/home/vigliag/thesis</value>
+    <value type="QString" key="ProjectExplorer.CustomExecutableRunConfiguration.WorkingDirectory">/home/vigliag/thesis/workdir</value>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">Run /home/vigliag/thesis/panda/build/i386-softmmu/qemu-system-i386</value>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">systaint</value>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">ProjectExplorer.CustomExecutableRunConfiguration</value>

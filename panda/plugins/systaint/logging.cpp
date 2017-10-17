@@ -10,11 +10,84 @@ extern "C" {
 #include <cstdio>
 #include <unordered_set>
 #include <iostream>
+#include <map>
+#include <set>
 
-using namespace std;
+#include "../fn_memlogger/EntropyCalculator.hpp"
+
+/** Holds a synthetic description of a given buffer */
+struct BufferInfo {
+    target_ulong base = 0;
+    target_ulong len = 0;
+    float entropy = -1;
+    std::vector<uint8_t> data;
+    const std::set<uint32_t>* deps;
+
+    std::string toString() const {
+        std::stringstream ss;
+        ss << reinterpret_cast<void*>(base) << "+" << len << ":" << entropy << ";";
+        return ss.str();
+    }
+};
+
+
+/* Computes a vector of BufferInfo from a map<address,data> (read/writeset) */
+std::vector<BufferInfo> toBufferInfos(const std::map<target_ulong, uint8_t>& addrset,
+                                      const std::map<uint32_t, std::set<uint32_t>>* depset = nullptr){
+    std::vector<BufferInfo> res;
+    BufferInfo temp;
+    EntropyCalculator ec;
+
+    for (const auto& addr_data : addrset) {
+        const target_ulong& addr = addr_data.first;
+        const uint8_t& data = addr_data.second;
+
+        const auto* deps = (depset && depset->count(addr)) ? &depset->at(addr) : nullptr;
+
+        const bool continuing = (addr == temp.base + temp.len) &&
+                                ((deps == temp.deps) ||
+                                    ((deps != nullptr && temp.deps != nullptr) && (*deps == *temp.deps))
+                                 );
+
+        if(continuing){
+            // continue previous buffer
+            temp.len++;
+            temp.data.push_back(data);
+            ec.add(data);
+
+        } else {
+            // start new BufferInfo
+
+            if(temp.base){
+                // save the old one first
+                temp.entropy = ec.get();
+                res.push_back(temp);
+            }
+
+            // init new buffer
+            temp.data.clear();
+            ec.reset();
+
+            temp.base = addr;
+            temp.len = 1;
+            temp.data.push_back(data);
+            temp.deps = deps;
+            ec.add(data);
+        }
+    }
+
+    // process last buffer (if any - ie addrset wasn't empty)
+    if(temp.base){
+        temp.entropy = ec.get();
+        res.push_back(temp);
+    }
+
+    return res;
+}
+
 
 std::unordered_map<uint32_t, std::vector<uint32_t>>
-setmap_to_vectormap(const std::map<uint32_t, std::unordered_set<uint32_t>>& setmap){
+setmap_to_vectormap(const std::map<uint32_t, std::set<uint32_t>>& setmap){
     std::unordered_map<uint32_t, std::vector<uint32_t>> result;
     for(const auto& key_setv: setmap){
         auto& depary = result[key_setv.first];
@@ -32,41 +105,61 @@ void logEvent(const Event& event, FILE* filepointer){
     pbEvent.entrypoint = event.entrypoint;
     pbEvent.ended = event.ended;
     pbEvent.kind = static_cast<uint32_t>(event.kind);
-    pbEvent.n_reads = event.memory.readset.size();
-    pbEvent.n_writes = event.memory.writeset.size();
 
     //Turn depsets to arrays, so we can pass them to protobuf directly
     std::unordered_map<uint32_t, std::vector<uint32_t>> depsetAry = setmap_to_vectormap(event.memory.readsetDeps);
 
-    //Create the array of pointers to reads
-    Panda__SysMemoryLocation *reads = new Panda__SysMemoryLocation[pbEvent.n_reads];
-    Panda__SysMemoryLocation **readPtrs = new Panda__SysMemoryLocation*[pbEvent.n_reads];
+    std::vector<BufferInfo> readBuffers = toBufferInfos(event.memory.readset, &event.memory.readsetDeps);
+    std::vector<BufferInfo> writeBuffers = toBufferInfos(event.memory.writeset);
 
-    int i = 0;
-    for(const auto& addr_value : event.memory.readset){
+    //Create the array of pointers to reads
+    Panda__SysMemoryLocation *reads = new Panda__SysMemoryLocation[readBuffers.size()];
+    Panda__SysMemoryLocation **readPtrs = new Panda__SysMemoryLocation*[readBuffers.size()];
+
+    size_t i = 0;
+    for(const auto& buffer : readBuffers){
+        const auto& addr = buffer.base;
+
         reads[i] = PANDA__SYS_MEMORY_LOCATION__INIT;
-        reads[i].n_dependencies = depsetAry[addr_value.first].size();
-        reads[i].dependencies = &(depsetAry[addr_value.first][0]);
-        reads[i].value = addr_value.second;
-        reads[i].address = addr_value.first;
+        reads[i].n_dependencies = depsetAry[addr].size();
+        reads[i].dependencies = &(depsetAry[addr][0]);
+
+        ProtobufCBinaryData pcbd;
+        pcbd.data = const_cast<uint8_t*>(buffer.data.data());
+        pcbd.len = buffer.data.size();
+        assert(pcbd.len == 0 || pcbd.data != nullptr);
+
+        reads[i].value = pcbd;
+
+        reads[i].address = buffer.base;
         readPtrs[i] = &reads[i];
         i++;
     }
+    pbEvent.n_reads = i;
     pbEvent.reads = readPtrs;
 
     // Same for writes
-    Panda__SysMemoryLocation *writes = new Panda__SysMemoryLocation[pbEvent.n_writes];
-    Panda__SysMemoryLocation **writePtrs = new Panda__SysMemoryLocation*[pbEvent.n_writes];
+    Panda__SysMemoryLocation *writes = new Panda__SysMemoryLocation[writeBuffers.size()];
+    Panda__SysMemoryLocation **writePtrs = new Panda__SysMemoryLocation*[writeBuffers.size()];
+
     i= 0;
-    for(const auto& addr_value : event.memory.writeset){
+    for(const auto& buffer : writeBuffers){
         writes[i] = PANDA__SYS_MEMORY_LOCATION__INIT;
         writes[i].n_dependencies = 0;
         writes[i].dependencies = nullptr;
-        writes[i].value = addr_value.second;
-        writes[i].address = addr_value.first;
+
+        ProtobufCBinaryData pcbd;
+        pcbd.data = const_cast<uint8_t*>(buffer.data.data());
+        pcbd.len = buffer.data.size();
+        assert(pcbd.len == 0 || pcbd.data != nullptr);
+
+        writes[i].value = pcbd;
+        writes[i].address = buffer.base;
         writePtrs[i] = &writes[i];
+
         i++;
     }
+    pbEvent.n_writes = i;
     pbEvent.writes = writePtrs;
 
     // Write entry either to pandalog or to file

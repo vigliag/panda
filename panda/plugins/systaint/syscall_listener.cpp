@@ -67,16 +67,19 @@ void parseSyscallDefs(const std::string& prototypesFilename){
 std::map<std::pair<uint32_t, uint32_t>, SysCall> active_syscalls;
 
 //tracked asid
-extern std::set<uint32_t> monitored_processes;
+using Asid = target_ulong;
+extern std::set<Asid> monitored_processes;
 
 // A SyscallPCpoint is added when a sysenter is translated, so that we can then recognize it when the sysenter actually happens
 static std::set<std::pair <target_ulong, target_ulong>> syscallPCpoints;
 
 /* When we execute an instruction (for which translate_callback returned true),
 we check if it was the Sysenter we saw before */
-int exec_callback(CPUState *cpu, target_ulong pc) {
+int sc_listener_exec_callback(CPUState *cpu, target_ulong pc) {
 
 #ifdef TARGET_I386
+    //temporarily disabling through this:
+    //return false;
 
     auto current_asid = panda_current_asid(cpu);
 
@@ -106,7 +109,7 @@ int exec_callback(CPUState *cpu, target_ulong pc) {
     call.return_addr = retaddr;
 
     active_syscalls[std::make_pair(current_asid, get_current_thread_id(cpu))] = call;
-    onSysEnter(cpu, syscalls[syscall_no], call);
+    on_syscall_enter(cpu, syscalls[syscall_no], call);
 
 #endif
     return 0;
@@ -114,27 +117,46 @@ int exec_callback(CPUState *cpu, target_ulong pc) {
 
 /* When an instruction is being translated, check if it's a sysenter, if it is
    add the target pc to syscallPCpoints. This code is copied from syscall2 */
-bool translate_callback(CPUState *cpu, target_ulong pc) {
+bool sc_listener_translate_callback(CPUState *cpu, target_ulong pc) {
 #ifdef TARGET_I386
-    if(!monitored_processes.count(panda_current_asid(cpu)))
-        return false;
+
+    // KNOWN BUGs:
+    // Only seems to work with llvm enabled
+    // sometimes we are unable to read the instruction from pc
+    // Spurious sysenters?
+
+    // Can we actually do this filtering? Problem: a given tb is translated only once
+    // if it is translated for a different untracked process.... TODO CHECK
+    //if(!monitored_processes.count(panda_current_asid(cpu))){
+    //    return false;
+    //}
+
+    //temporarily disabling through this:
+    //return false;
 
     bool syscall_dectected = false;
 
     unsigned char buf[2] = {};
-    panda_virtual_memory_rw(cpu, pc, buf, 2, 0);
+    int ret = panda_virtual_memory_rw(cpu, pc, buf, 2, 0);
+    if(ret < 0){
+        std::cerr << "error while reading instruction from pc:" << pc << std::endl;
+        return false;
+    }
 
     // Check if the instruction is syscall (0F 05)
     if (buf[0]== 0x0F && buf[1] == 0x05) {
+        std::cout << "SYSCALL "<< std::endl;
         syscall_dectected = true;
     }
     // Check if the instruction is int 0x80 (CD 80)
     else if (buf[0]== 0xCD && buf[1] == 0x80) {
-        syscall_dectected = false;
+        std::cout << "SYSCALL 80"<< std::endl;
+        syscall_dectected = true;
     }
     // Check if the instruction is sysenter (0F 34)
     else if (buf[0]== 0x0F && buf[1] == 0x34) {
-        return true;
+        std::cout << "SYSENTER" << std::endl;
+        syscall_dectected = true;
     }
 
     if(syscall_dectected){
@@ -149,7 +171,7 @@ bool translate_callback(CPUState *cpu, target_ulong pc) {
 return false;
 }
 
-int returned_check_callback(CPUState *cpu, TranslationBlock* tb){
+int sc_listener_returned_check_callback(CPUState *cpu, TranslationBlock* tb){
 #ifdef TARGET_I386
     if(!monitored_processes.count(panda_current_asid(cpu)))
         return false;
@@ -162,7 +184,7 @@ int returned_check_callback(CPUState *cpu, TranslationBlock* tb){
         auto& syscall = active_syscalls[thread];
 
         if(tb->pc == syscall.return_addr){
-            onSysExit(cpu, syscalls[syscall.syscall_no], active_syscalls[thread]);
+            on_syscall_exit(cpu, syscalls[syscall.syscall_no], active_syscalls[thread]);
             active_syscalls.erase(thread);
         }
     }

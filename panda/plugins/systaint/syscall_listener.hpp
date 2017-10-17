@@ -27,12 +27,14 @@ struct SysCall {
 boost::optional<SyscallDef> parsePrototype(const std::string& prototype);
 void parseSyscallDefs(const std::string& prototypesFilename);
 bool translate_callback(CPUState *cpu, target_ulong pc);
-int exec_callback(CPUState *cpu, target_ulong pc);
 
-void onSysEnter(CPUState *cpu, const SyscallDef& sc, const SysCall call);
-void onSysExit(CPUState *cpu, const SyscallDef& sc, const SysCall call);
+int sc_listener_exec_callback(CPUState *cpu, target_ulong pc);
+bool sc_listener_translate_callback(CPUState *cpu, target_ulong pc);
 
-int returned_check_callback(CPUState *cpu, TranslationBlock* tb);
+void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, const SysCall call);
+void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, const SysCall call);
+
+int sc_listener_returned_check_callback(CPUState *cpu, TranslationBlock* tb);
 
 
 #endif // SYSCALL_LISTENER_HPP

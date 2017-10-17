@@ -1,6 +1,6 @@
 message SysMemoryLocation {
    required uint32 address = 1;
-   required uint32 value = 2;
+   required bytes value = 2;
    repeated uint32 dependencies = 3 [packed=true];
 }
 

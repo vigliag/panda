@@ -1,7 +1,7 @@
 #pragma once
 
 #include <map>
-#include <unordered_set>
+#include <set>
 #include <cstdint>
 #include <sstream>
 
@@ -10,7 +10,7 @@ class CallMemAccessTracker
 public:
     std::map<uint32_t, uint8_t> writeset;
     std::map<uint32_t, uint8_t> readset;
-    std::map<uint32_t, std::unordered_set<uint32_t>> readsetDeps;
+    std::map<uint32_t, std::set<uint32_t>> readsetDeps;
 
     CallMemAccessTracker(){
 
@@ -57,6 +57,7 @@ struct Event {
     uint32_t ret_addr = 0;
     uint32_t entrypoint = 0;
     uint32_t label = 0;
+    std::set<uint32_t> tags;
     FQThreadId thread;
     EventKind kind = EventKind::unknown;
 
