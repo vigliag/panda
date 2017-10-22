@@ -94,7 +94,7 @@ int sc_listener_exec_callback(CPUState *cpu, target_ulong pc) {
     uint32_t syscall_no = env->regs[R_EAX];
 
     if(syscall_no >= syscalls.size()){
-        std::cout << "Sysenter, no: " << syscall_no << "ignored" << std::endl ;
+        std::cout << "Sysenter, no: " << syscall_no << "(unknown) ignored" << std::endl ;
         return 0;
     }
     auto syscallDef = syscalls[syscall_no];

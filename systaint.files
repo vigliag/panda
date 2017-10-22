@@ -2768,6 +2768,7 @@ panda/plugins/systaint/systaint.hpp
 panda/plugins/systaint/systaint.hpp
 panda/plugins/systaint/systaint.proto
 panda/plugins/systaint/Makefile
+panda/plugins/systaint/tainting.hpp
 panda/plugins/taint2/USAGE.md
 panda/plugins/taint2/fast_shad.cpp
 panda/plugins/taint2/fast_shad.cpp

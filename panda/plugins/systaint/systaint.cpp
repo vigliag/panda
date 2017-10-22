@@ -49,22 +49,46 @@ using Address = target_ulong;
 using dependencySet = std::unordered_set<EventID>;
 
 class EventTracker {
-    std::map<FQThreadId, shared_ptr<Event>> curr_event;
-    std::map<FQThreadId, std::set<uint32_t>> curr_tags;
+
 public:
+    std::map<FQThreadId, std::vector<shared_ptr<Event>>> curr_events;
+    std::map<FQThreadId, std::vector<uint32_t>> curr_tags;
+
     std::shared_ptr<Event> getEvent(FQThreadId thread_id){
-        return curr_event[thread_id];
+        auto& events = curr_events[thread_id];
+        if(events.size()){
+            return curr_events[thread_id].back();
+        } else {
+            return nullptr;
+        }
     }
+
+    std::vector<uint32_t>& getTags(FQThreadId thread_id){
+        return curr_tags[thread_id];
+    }
+
     void put_event(FQThreadId thread_id, shared_ptr<Event> event){
-        curr_event[thread_id] = event;
+        event->thread = thread_id;
+        auto& events = curr_events[thread_id];
+        if(events.size()){
+            event->parent = events.back()->getLabel();
+        }
+        events.push_back(event);
     }
-    void closeEvent(FQThreadId thread_id){
-        curr_event.erase(thread_id);
+
+    void closeEvent(FQThreadId thread_id, Event& event){
+        auto& events = curr_events[thread_id];
+        events.erase(std::find_if(events.begin(), events.end(),
+                                    [&event](const shared_ptr<Event>& cev){
+                                           return cev->label == event.label;
+                                    }),
+                                    events.end());
+
     }
 };
 
 
-static std::map<EventID, dependencySet> eventDependencies;
+//static std::map<EventID, dependencySet> eventDependencies;
 
 #ifdef TARGET_I386
 
@@ -92,28 +116,7 @@ static FQThreadId getFQThreadId(CPUState* cpu){
     return std::make_pair(panda_current_asid(cpu), get_current_thread_id(cpu));
 }
 
-// Event Tracker
 static EventTracker events;
-
-/* Used as a callback to add new_label as a dependency to this_label
-   uses global data structures */
-/*
-int currentEventDependencyAdder(uint32_t dependency, void *address){
-    target_ulong addr = *(target_ulong*) address;
-
-    if(dependency == current_event){
-        return 0;
-    }
-
-    if (eventDependencies[current_event].count(dependency) == 0){
-        printf("adding dependency %u -> %u \n", dependency, current_event);
-        eventDependencies[current_event].insert(dependency);
-    }
-
-    current_event_memtracker.readdep(addr, dependency);
-    return 0;
-}
-*/
 
 /** Reads the labels for a given memory range, executing the callback function for each*/
 int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, std::function<void(uint32_t, uint32_t)> callback){
@@ -143,70 +146,11 @@ int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, std::functio
 
 #ifdef TARGET_I386
 
-/* When a sysenter is being executed, and we are about to jump in kernel-space.
-Note this is only executed for interesting asid (filtering has been done on translate_callback) */
-void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
-
-    FQThreadId thread = getFQThreadId(cpu);
-    auto current_event = events.getEvent(thread);
-
-    if(current_event){
-        cout << sc.name << " while current_event was" << current_event->toString() << endl;
-    } else {
-        cout << "SYSENTER detected with no current event, creating syscall event" << endl;
-        current_event = make_shared<Event>();
-        current_event->kind = EventKind::syscall;
-        current_event->entrypoint = sc.callno;
-        current_event->started = rr_get_guest_instr_count();
-        events.put_event(thread, current_event);
-    }
-
-
-    /*
-
-    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
-    // Read taint for syscall args, the current event depends on the ones who
-    // tainted the arguments of the current syscall
-    if(!taint2_enabled()){
-        return;
-    }
-
-    //take size and location of syscall parameters
-    //regs[R_EDX] + 8 points to the start of the syscall parameters
-    uint64_t arg_start = env->regs[R_EDX] + 8;
-    std::size_t arg_len = sc.paramSize();
-
-    //cout << "Reading taint from " << arg_start << " to " << arg_start + arg_len << " from event " << current_event << endl;
-    //readLabels(cpu, arg_start, arg_len, currentEventDependencyAdder);
-    //cout << "done" << endl;
-
-    */
-
-    // TODO taint EAX on sysExit (not required on windows, as return values are error messages)
-
-    /* We now clear the taint from these arguments, and taint them again with
-    the label of the current event. We do this to taint the pointers, so that 
-    anytime this syscall uses them to write to memory, the result is also 
-    tainted */ 
-    /*
-    cout << "Re-tainting ";
-    uint64_t arg_start_pa = panda_virt_to_phys(cpu, arg_start);
-    if(arg_start_pa == -1){
-        cout << "ERROR panda_virt_to_phys errored" <<endl;
-        return;
-    }
-    cout << "Tainting syscall args with " << taint_label << endl ;
-    for(std::size_t i=0; i<arg_len; i++){
-        taint2_delete_ram(arg_start_pa + i);
-        taint2_label_ram_additive(arg_start_pa + i, taint_label);
-    }*/
-    //cout << "done" << endl;
-}
-
-void onEventEnd(CPUState* cpu, FQThreadId thread){
+static void finalize_current_event(CPUState* cpu, FQThreadId thread){
     auto event = events.getEvent(thread);
     assert(event);
 
+    // finalizing
     event->ended = rr_get_guest_instr_count();
 
     cout << "EVENT exit " << event->toString() << endl;
@@ -215,8 +159,8 @@ void onEventEnd(CPUState* cpu, FQThreadId thread){
     for(const auto& addr_data: event->memory.writeset){
         uint64_t write_pa = panda_virt_to_phys(cpu, addr_data.first);
 
-        if(write_pa == -1){
-            cout << "ERROR panda_virt_to_phys errored while labeling " << addr_data.first << " with " << event->getLabel() << endl;
+        if(write_pa == static_cast<uint64_t>(-1)){
+            cerr << "ERROR panda_virt_to_phys errored while labeling " << addr_data.first << " with " << event->getLabel() << endl;
             break;
         } else {
             if(taint2_enabled()){
@@ -226,13 +170,84 @@ void onEventEnd(CPUState* cpu, FQThreadId thread){
     }
 
     //logging
-    cout << "DEPS" << event->memory.readsetDeps.size() << endl;
     logEvent(*event, outfp);
-    events.closeEvent(thread);
+    events.closeEvent(thread, *event);
 }
 
+/**
+ * When a sysenter is being executed, and we are about to jump in kernel-space.
+ */
+void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
+
+
+
+    if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
+       call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
+       call.syscall_no == 131){ // Skip NtFreeVirtualMemory (for simmetry)
+        return;
+    }
+
+    FQThreadId thread = getFQThreadId(cpu);
+
+    //Filtering is already done on instruction exec callback
+
+    auto current_event = events.getEvent(thread);
+    auto& current_tags = events.getTags(thread);
+
+    if(current_event){
+        cout << "SYSENTER ENCOUNTERED " << sc.name << " while current_event was" << current_event->toString() << endl;
+    }
+
+    cout << "SYSENTER " << sc.name << endl;
+    auto new_event = make_shared<Event>();
+    new_event->kind = EventKind::syscall;
+    new_event->entrypoint = static_cast<uint32_t>(sc.callno);
+    new_event->started = call.start;
+    events.put_event(thread, new_event);
+
+    if(current_tags.size()){
+        cout << "current_tag " << current_tags[0] << endl;
+        new_event->tags = current_tags;
+    }
+
+
+    /* Fine grained tainting (only taint arguments)
+     * disabled for now in favor of tainting all memory accesses */
+#if 0
+    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+    if(!taint2_enabled())
+        return;
+
+    //take size and location of syscall parameters
+    uint64_t arg_start = env->regs[R_EDX] + 8;
+    std::size_t arg_len = sc.paramSize();
+
+    //cout << "Reading taint from " << arg_start << " to " << arg_start + arg_len << " from event " << current_event << endl;
+    //readLabels(cpu, arg_start, arg_len, currentEventDependencyAdder);
+
+    // TODO taint EAX on sysExit (not required on windows, as return values are error messages)
+
+    /* We now clear the taint from these arguments, and taint them again with
+    the label of the current event. We do this to taint the pointers, so that 
+    anytime this syscall uses them to write to memory, the result is also 
+    tainted */ 
+
+    uint64_t arg_start_pa = panda_virt_to_phys(cpu, arg_start);
+    if(arg_start_pa == -1){
+        cout << "ERROR panda_virt_to_phys errored" <<endl;
+        return;
+    }
+    cout << "Tainting syscall args with " << taint_label << endl ;
+    for(std::size_t i=0; i<arg_len; i++){
+        taint2_delete_ram(arg_start_pa + i);
+        taint2_label_ram_additive(arg_start_pa + i, taint_label);
+    }
+#endif
+}
 
 void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
+    (void) sc;
+
     FQThreadId thread = getFQThreadId(cpu);
     auto current_event = events.getEvent(thread);
 
@@ -241,13 +256,13 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
         return;
     }
 
-    if(current_event->kind != EventKind::syscall){
-        cout << "SYSCALL ignoring exit (current event has precedence) " << endl;
+    if(current_event->kind != EventKind::syscall || current_event->started != call.start){
+        cout << "SYSCALL ignoring exit" << endl;
         return;
     }
 
     cout << "SYSCALL EVENT exit " << current_event->toString() << endl;
-    onEventEnd(cpu, thread);
+    finalize_current_event(cpu, thread);
 
 }
 
@@ -255,11 +270,11 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
 
 
 /**
- * @brief systaint_event_enter allows insertion of external events
+ * @brief allows insertion of external events
  * @param cpu
  * @param event_label
  */
-void systaint_event_enter(CPUState *cpu, uint32_t event_label){
+void external_event_enter(CPUState *cpu, uint32_t event_label){
     assert(cpu);
     assert(event_label);
 
@@ -270,6 +285,10 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
         if(automatically_add_processes){
             cout << "TRACKING " << asid << " instcount " <<  rr_get_guest_instr_count() << endl;
             monitored_processes.insert(asid);
+
+            //TODO
+            //don't know why it is needed. Apparently some tbs are marked as translated
+            //and don't go into syscall_listener's translate callback again
             panda_do_flush_tb();
         } else {
             return;
@@ -277,8 +296,13 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
     }
 
     FQThreadId thread = getFQThreadId(cpu);
-
     auto current_event = events.getEvent(thread);
+    auto& current_tags = events.getTags(thread);
+    current_tags.push_back(event_label);
+
+    cout << "external event: " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
+
+#if 0
     if(!current_event){
         cout << "EVENT enter " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
 
@@ -294,6 +318,7 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
         // as the topmost one should give us the most information
         cout << "EVENT ignored " << event_label << " instcount " <<  rr_get_guest_instr_count()<< " current " << current_event->toString() << endl;
     }
+#endif
 
     if (!taint2_enabled() && !no_llvm) {
         printf("enabling taint\n");
@@ -301,7 +326,7 @@ void systaint_event_enter(CPUState *cpu, uint32_t event_label){
     }
 }
 
-void systaint_event_exit(CPUState *cpu, uint32_t event_label){
+void external_event_exit(CPUState *cpu, uint32_t event_label){
     assert(cpu);
     assert(event_label);
 
@@ -312,16 +337,20 @@ void systaint_event_exit(CPUState *cpu, uint32_t event_label){
 
     auto thread = getFQThreadId(cpu);
     auto current_event = events.getEvent(thread);
+    auto& current_tags = events.getTags(thread);
 
-    if(!current_event){
-        cerr << "WARNING exit from unexpected event " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
-        return;
-    }
+    //if(!current_event){
+    //    cerr << "WARNING exit from unexpected event " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
+    //    return;
+    //}
 
-    if(event_label == current_event->label){
-        onEventEnd(cpu, thread);
+    // Remove all tags started after the one terminating (vector is sorted)
+    current_tags.erase(std::find(current_tags.begin(), current_tags.end(), event_label), current_tags.end());
+
+    if(current_event && current_event->kind == EventKind::external && event_label == current_event->label){
+        finalize_current_event(cpu, thread);
     } else {
-        cout << "EVENT ignored_exit " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
+        cout << "external event ignored_exit " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
     }
 }
 
@@ -331,7 +360,7 @@ void systaint_event_exit(CPUState *cpu, uint32_t event_label){
 // ========================
 
 
-void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
+void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
     if (panda_in_kernel(cpu) || !monitored_processes.count(panda_current_asid(cpu))){
         return;
     }
@@ -359,8 +388,10 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
     }
 }
 
-void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
+void on_function_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
                uint32_t skipped_frames){
+    (void) entrypoint;
+    (void) skipped_frames;
 
     if (panda_in_kernel(cpu)){
         return;
@@ -370,7 +401,7 @@ void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
     auto p_current_event = events.getEvent(thread);
 
     if(p_current_event && p_current_event->started == callid){
-        onEventEnd(cpu, thread);
+        finalize_current_event(cpu, thread);
     }
 }
 
@@ -381,6 +412,8 @@ void on_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
 
 int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
+    (void) pc;
+
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
 
     if (!monitored_processes.count(panda_current_asid(cpu)) || !isUserSpaceAddress(addr)){
@@ -401,6 +434,8 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
 int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
+    (void) pc;
+
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
 
     if (!monitored_processes.count(panda_current_asid(cpu))) {
@@ -497,10 +532,10 @@ bool init_plugin(void *self) {
 
     panda_require("taint2");
     assert(init_taint2_api());
-//    PPP_REG_CB("taint2", on_taint_change, on_taint_change);
 
-//    taintchanges = fopen("/tmp/taintchanges.log", "w");
-//    assert(taintchanges);
+    //PPP_REG_CB("taint2", on_taint_change, on_taint_change);
+    //taintchanges = fopen("/tmp/taintchanges.log", "w");
+    //assert(taintchanges);
 
     panda_require("callstack_instr");
     assert(init_callstack_instr_api());
@@ -514,12 +549,12 @@ bool init_plugin(void *self) {
 
     parseSyscallDefs("windows7_x86_prototypes.txt");
 
-    PPP_REG_CB("callstack_instr", on_call2, on_call);
-    PPP_REG_CB("callstack_instr", on_ret2, on_return);
+    PPP_REG_CB("callstack_instr", on_call2, on_function_call);
+    PPP_REG_CB("callstack_instr", on_ret2, on_function_return);
 
     panda_require("sysevent");
-    PPP_REG_CB("sysevent", on_sysevent_enter, systaint_event_enter);
-    PPP_REG_CB("sysevent", on_sysevent_exit, systaint_event_exit);
+    PPP_REG_CB("sysevent", on_sysevent_enter, external_event_enter);
+    PPP_REG_CB("sysevent", on_sysevent_exit, external_event_exit);
 
     panda_arg_list *args = panda_get_args("systaint");
     if (args != NULL) {
@@ -570,22 +605,36 @@ bool init_plugin(void *self) {
 }
 
 
-void printOutDeps(){
-    for (auto& it : eventDependencies){
-        uint32_t to = it.first;
-        const dependencySet& depset = it.second;
+//void printOutDeps(){
+//    for (auto& it : eventDependencies){
+//        uint32_t to = it.first;
+//        const dependencySet& depset = it.second;
 
-        for (auto& from : depset){
-            printf("DEPENDENCY %u %u \n", from, to);
-        }
-    }
-}
+//        for (auto& from : depset){
+//            printf("DEPENDENCY %u %u \n", from, to);
+//        }
+//    }
+//}
 
 
 void uninit_plugin(void *self) {
     #ifdef TARGET_I386
 
-    printOutDeps();
+    // handle unterminated events
+
+    cout << "UNTERMINATED " << endl;
+
+    for(const auto& thread_event : events.curr_events){
+        //const auto& t = thread_event.first;
+        const auto& evs = thread_event.second;
+
+        for(const auto& e : evs){
+            std::cout << e->toString() << std::endl;
+            logEvent(*e, outfp);
+        }
+    }
+
+    //printOutDeps();
 
     if(outfp){
         fclose(outfp);

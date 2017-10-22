@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE QtCreatorProject>
-<!-- Written by QtCreator 4.4.1, 2017-10-16T22:19:31. -->
+<!-- Written by QtCreator 4.4.1, 2017-10-22T16:40:44. -->
 <qtcreator>
  <data>
   <variable>EnvironmentId</variable>
@@ -19,7 +19,7 @@
    <valuemap type="QVariantMap" key="EditorConfiguration.CodeStyle.0">
     <value type="QString" key="language">Cpp</value>
     <valuemap type="QVariantMap" key="value">
-     <value type="QByteArray" key="CurrentPreferences">CppGlobal</value>
+     <value type="QByteArray" key="CurrentPreferences">qt</value>
     </valuemap>
    </valuemap>
    <valuemap type="QVariantMap" key="EditorConfiguration.CodeStyle.1">
@@ -54,7 +54,11 @@
  </data>
  <data>
   <variable>ProjectExplorer.Project.PluginSettings</variable>
-  <valuemap type="QVariantMap"/>
+  <valuemap type="QVariantMap">
+   <valuelist type="QVariantList" key="ClangCodeModel.CustomCommandLineKey"/>
+   <value type="bool" key="ClangCodeModel.UseGlobalConfig">true</value>
+   <valuelist type="QVariantList" key="ClangStaticAnalyzer.SuppressedDiagnostics"/>
+  </valuemap>
  </data>
  <data>
   <variable>ProjectExplorer.Project.Target.0</variable>
@@ -293,10 +297,10 @@
     <value type="QString" key="ProjectExplorer.CustomExecutableRunConfiguration.Arguments">~/vms/win7_cuckoo.qcow2 -m 512M -netdev user,id=net1 -device rtl8139,netdev=net1,mac=02:29:07:29:9F:41 -replay sysrec -os windows-32-7 -panda 'systaint:outfile=outfl1,asids=auto,no_llvm=true'
 </value>
     <value type="QString" key="ProjectExplorer.CustomExecutableRunConfiguration.Executable">/home/vigliag/thesis/panda/build/i386-softmmu/qemu-system-i386</value>
-    <value type="bool" key="ProjectExplorer.CustomExecutableRunConfiguration.UseTerminal">true</value>
+    <value type="bool" key="ProjectExplorer.CustomExecutableRunConfiguration.UseTerminal">false</value>
     <value type="QString" key="ProjectExplorer.CustomExecutableRunConfiguration.WorkingDirectory">/home/vigliag/thesis/workdir</value>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.DefaultDisplayName">Run /home/vigliag/thesis/panda/build/i386-softmmu/qemu-system-i386</value>
-    <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">systaint</value>
+    <value type="QString" key="ProjectExplorer.ProjectConfiguration.DisplayName">systaint nollvm</value>
     <value type="QString" key="ProjectExplorer.ProjectConfiguration.Id">ProjectExplorer.CustomExecutableRunConfiguration</value>
     <value type="uint" key="RunConfiguration.QmlDebugServerPort">3768</value>
     <value type="bool" key="RunConfiguration.UseCppDebugger">false</value>

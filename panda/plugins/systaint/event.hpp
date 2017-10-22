@@ -4,6 +4,7 @@
 #include <set>
 #include <cstdint>
 #include <sstream>
+#include <vector>
 
 class CallMemAccessTracker
 {
@@ -57,9 +58,10 @@ struct Event {
     uint32_t ret_addr = 0;
     uint32_t entrypoint = 0;
     uint32_t label = 0;
-    std::set<uint32_t> tags;
+    std::vector<uint32_t> tags;
     FQThreadId thread;
     EventKind kind = EventKind::unknown;
+    uint32_t parent = 0;
 
     std::string toString() const {
         std::stringstream res;
@@ -74,7 +76,7 @@ struct Event {
         case EventKind::unknown:
             res << "unknown "; break;
         }
-        res << "id " << entrypoint << " started " << started;
+        res << "id " << getLabel() << " started " << started << " thread " << thread.second;
         return res.str();
     }
 

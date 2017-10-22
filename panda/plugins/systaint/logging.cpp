@@ -105,12 +105,18 @@ void logEvent(const Event& event, FILE* filepointer){
     pbEvent.entrypoint = event.entrypoint;
     pbEvent.ended = event.ended;
     pbEvent.kind = static_cast<uint32_t>(event.kind);
+    pbEvent.parent = event.parent;
+    pbEvent.pid = event.thread.first;
+    pbEvent.thread = event.thread.second;
 
     //Turn depsets to arrays, so we can pass them to protobuf directly
     std::unordered_map<uint32_t, std::vector<uint32_t>> depsetAry = setmap_to_vectormap(event.memory.readsetDeps);
 
     std::vector<BufferInfo> readBuffers = toBufferInfos(event.memory.readset, &event.memory.readsetDeps);
     std::vector<BufferInfo> writeBuffers = toBufferInfos(event.memory.writeset);
+
+    //std::vector<uint32_t> tags(event.tags.begin(), event.tags.end());
+    const std::vector<uint32_t> &tags = event.tags;
 
     //Create the array of pointers to reads
     Panda__SysMemoryLocation *reads = new Panda__SysMemoryLocation[readBuffers.size()];
@@ -135,6 +141,10 @@ void logEvent(const Event& event, FILE* filepointer){
         readPtrs[i] = &reads[i];
         i++;
     }
+
+    pbEvent.n_tags = tags.size();
+    pbEvent.tags = const_cast<uint32_t*>(tags.data());
+
     pbEvent.n_reads = i;
     pbEvent.reads = readPtrs;
 
@@ -174,12 +184,9 @@ void logEvent(const Event& event, FILE* filepointer){
 
         // Write to filepointer, prepended by the buffer's size
         uint64_t buffer_size = panda__sys_fn_call__get_packed_size(&pbEvent);
-        printf("buffer size %ld\n", buffer_size);
         uint8_t* buffer = new uint8_t[buffer_size+1];
 
-        printf("ENCODING \n");
         panda__sys_fn_call__pack(&pbEvent, buffer);
-        printf("ENCODED \n");
 
         fwrite(&buffer_size, sizeof(buffer_size), 1, filepointer);
         fwrite(buffer, buffer_size, 1, filepointer);
