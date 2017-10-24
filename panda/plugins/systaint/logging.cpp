@@ -35,51 +35,52 @@ struct BufferInfo {
 std::vector<BufferInfo> toBufferInfos(const std::map<target_ulong, uint8_t>& addrset,
                                       const std::map<uint32_t, std::set<uint32_t>>* depset = nullptr){
     std::vector<BufferInfo> res;
-    BufferInfo temp;
+    BufferInfo current_buff;
     EntropyCalculator ec;
 
     for (const auto& addr_data : addrset) {
         const target_ulong& addr = addr_data.first;
         const uint8_t& data = addr_data.second;
 
-        const auto* deps = (depset && depset->count(addr)) ? &depset->at(addr) : nullptr;
+        const auto* pdeps = (depset && depset->count(addr)) ? &depset->at(addr) : nullptr;
 
-        const bool continuing = (addr == temp.base + temp.len) &&
-                                ((deps == temp.deps) ||
-                                    ((deps != nullptr && temp.deps != nullptr) && (*deps == *temp.deps))
+
+        const bool continuing = (addr == current_buff.base + current_buff.len) &&
+                                ((pdeps == current_buff.deps) ||
+                                    ((pdeps != nullptr && current_buff.deps != nullptr) && (*pdeps == *current_buff.deps))
                                  );
 
         if(continuing){
             // continue previous buffer
-            temp.len++;
-            temp.data.push_back(data);
+            current_buff.len++;
+            current_buff.data.push_back(data);
             ec.add(data);
 
         } else {
             // start new BufferInfo
 
-            if(temp.base){
-                // save the old one first
-                temp.entropy = ec.get();
-                res.push_back(temp);
+            if(current_buff.base){
+                // finalize and save the old one first
+                current_buff.entropy = ec.get();
+                res.push_back(current_buff);
             }
 
             // init new buffer
-            temp.data.clear();
+            current_buff.data.clear();
             ec.reset();
 
-            temp.base = addr;
-            temp.len = 1;
-            temp.data.push_back(data);
-            temp.deps = deps;
+            current_buff.base = addr;
+            current_buff.len = 1;
+            current_buff.data.push_back(data);
+            current_buff.deps = pdeps;
             ec.add(data);
         }
     }
 
     // process last buffer (if any - ie addrset wasn't empty)
-    if(temp.base){
-        temp.entropy = ec.get();
-        res.push_back(temp);
+    if(current_buff.base){
+        current_buff.entropy = ec.get();
+        res.push_back(current_buff);
     }
 
     return res;

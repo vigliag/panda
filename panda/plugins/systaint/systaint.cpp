@@ -43,16 +43,22 @@ int guest_hypercall_callback(CPUState *cpu);
 #include "introspection.hpp"
 
 using namespace std;
+
 using EventID = uint32_t;
 using Asid = target_ulong;
 using Address = target_ulong;
-using dependencySet = std::unordered_set<EventID>;
+using Tag = uint32_t;
+using Label = uint32_t;
+
+//using dependencySet = std::unordered_set<EventID>;
 
 class EventTracker {
 
 public:
+    /** per-thread stack of current events */
     std::map<FQThreadId, std::vector<shared_ptr<Event>>> curr_events;
-    std::map<FQThreadId, std::vector<uint32_t>> curr_tags;
+    /** per-thread stack of current tags */
+    std::map<FQThreadId, std::vector<Tag>> curr_tags;
 
     std::shared_ptr<Event> getEvent(FQThreadId thread_id){
         auto& events = curr_events[thread_id];
@@ -63,21 +69,23 @@ public:
         }
     }
 
-    std::vector<uint32_t>& getTags(FQThreadId thread_id){
+    std::vector<Tag>& getTags(FQThreadId thread_id){
         return curr_tags[thread_id];
     }
 
-    void put_event(FQThreadId thread_id, shared_ptr<Event> event){
+    void put_event(const FQThreadId& thread_id, shared_ptr<Event> event){
         event->thread = thread_id;
-        auto& events = curr_events[thread_id];
-        if(events.size()){
-            event->parent = events.back()->getLabel();
+        auto& existing_events = curr_events[thread_id];
+        if(existing_events.size()){
+            event->parent = existing_events.back()->getLabel();
         }
-        events.push_back(event);
+        existing_events.push_back(event);
     }
 
-    void closeEvent(FQThreadId thread_id, Event& event){
+    void closeEvent(const FQThreadId& thread_id, Event& event){
         auto& events = curr_events[thread_id];
+        //remove all events above the current one from the event stack
+        //TODO those events should be logged, not discarded
         events.erase(std::find_if(events.begin(), events.end(),
                                     [&event](const shared_ptr<Event>& cev){
                                            return cev->label == event.label;
@@ -98,10 +106,12 @@ public:
 // whether we want to run without LLVM and taint analysis
 static bool no_llvm = false;
 
-// filename where to print the function call data we collect
+// filename where to print the collected data
 static const char* outfile = nullptr;
 
 static bool automatically_add_processes = false;
+
+static bool extevents_as_primary = false;
 
 // Globals:
 //////////////
@@ -109,7 +119,8 @@ static bool automatically_add_processes = false;
 // Opened filepointer for writing collected function data
 static FILE* outfp = nullptr;
 
-std::set<Asid> monitored_processes;
+std::set<Asid> monitored_processes; //shared with syscall_listener
+
 static std::set<Address> monitored_encoding_calls;
 
 static FQThreadId getFQThreadId(CPUState* cpu){
@@ -119,7 +130,7 @@ static FQThreadId getFQThreadId(CPUState* cpu){
 static EventTracker events;
 
 /** Reads the labels for a given memory range, executing the callback function for each*/
-int readLabels(CPUState* cpu, target_ulong addr, target_ulong size, std::function<void(uint32_t, uint32_t)> callback){
+int readLabels(CPUState* cpu, Address addr, target_ulong size, std::function<void(Address, Label)> callback){
     if(!taint2_enabled()) return 0;
 
     uint64_t abs_addr = panda_virt_to_phys(cpu, addr);
@@ -156,16 +167,9 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
     cout << "EVENT exit " << event->toString() << endl;
 
     //labeling
-    for(const auto& addr_data: event->memory.writeset){
-        uint64_t write_pa = panda_virt_to_phys(cpu, addr_data.first);
-
-        if(write_pa == static_cast<uint64_t>(-1)){
-            cerr << "ERROR panda_virt_to_phys errored while labeling " << addr_data.first << " with " << event->getLabel() << endl;
-            break;
-        } else {
-            if(taint2_enabled()){
-                taint2_label_ram(write_pa, event->getLabel());
-            }
+    if(taint2_enabled()){
+        for(const auto& addr: event->memory.phisicalAddressesToTaint){
+            taint2_label_ram(addr, event->getLabel());
         }
     }
 
@@ -178,8 +182,6 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
  * When a sysenter is being executed, and we are about to jump in kernel-space.
  */
 void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
-
-
 
     if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
        call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
@@ -298,27 +300,31 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
     FQThreadId thread = getFQThreadId(cpu);
     auto current_event = events.getEvent(thread);
     auto& current_tags = events.getTags(thread);
-    current_tags.push_back(event_label);
 
     cout << "external event: " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
 
-#if 0
-    if(!current_event){
-        cout << "EVENT enter " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
-
-        current_event = make_shared<Event>();
-        current_event->entrypoint = event_label;
-        current_event->started = rr_get_guest_instr_count();
-        current_event->kind = EventKind::external;
-        current_event->label = event_label;
-        events.put_event(thread, current_event);
-
-    } else {
-        // we ignore nested events (such as nested syscalls)
-        // as the topmost one should give us the most information
-        cout << "EVENT ignored " << event_label << " instcount " <<  rr_get_guest_instr_count()<< " current " << current_event->toString() << endl;
+    if(!extevents_as_primary){
+        current_tags.push_back(event_label);
     }
-#endif
+
+    if(extevents_as_primary){
+        if(!current_event){
+            cout << "EVENT enter " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
+
+            current_event = make_shared<Event>();
+            current_event->entrypoint = event_label;
+            current_event->started = rr_get_guest_instr_count();
+            current_event->kind = EventKind::external;
+            current_event->label = event_label;
+            events.put_event(thread, current_event);
+
+        } else {
+            // we ignore nested events (such as nested syscalls)
+            // as the topmost one should give us the most information
+            cout << "EVENT ignored " << event_label << " instcount " <<  rr_get_guest_instr_count()<< " current " << current_event->toString() << endl;
+        }
+    }
+
 
     if (!taint2_enabled() && !no_llvm) {
         printf("enabling taint\n");
@@ -424,8 +430,18 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     auto p_current_event = events.getEvent(thread);
 
     if(p_current_event){
+        hwaddr phisical_address = panda_virt_to_phys(cpu, addr);
+        bool translation_error = phisical_address == static_cast<hwaddr>(-1);
+        if(translation_error){
+            cerr << "Error when translating address " << addr << "to phyisical" << endl;
+        }
+
         for(target_ulong i=0; i<size; i++){
             p_current_event->memory.write(addr+i, data[i]);
+
+            if(!translation_error){
+                p_current_event->memory.phisicalAddressToTaint(phisical_address + i);
+            }
         }
     }
     
@@ -574,6 +590,8 @@ bool init_plugin(void *self) {
 
         no_llvm = panda_parse_bool_opt(args, "no_llvm", "disable llvm and tainting");
         cout << "no_llvm " << no_llvm << endl;
+
+        extevents_as_primary = panda_parse_bool_opt(args, "extevents", "use syscalls as primary events");
 
         //fast = panda_parse_bool_opt(args, "fast", "turn on and off taint when asid changes");
         outfile = panda_parse_string_opt(args, "outfile", nullptr, "an output file");
