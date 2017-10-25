@@ -129,17 +129,19 @@ static FQThreadId getFQThreadId(CPUState* cpu){
 
 static EventTracker events;
 
-/** Reads the labels for a given memory range, executing the callback function for each*/
+static std::set<hwaddr> phisicalAddressesToTaint;
+
+/** Reads the labels for a given memory range, executing the callback function for each */
 int readLabels(CPUState* cpu, Address addr, target_ulong size, std::function<void(Address, Label)> callback){
     if(!taint2_enabled()) return 0;
 
     uint64_t abs_addr = panda_virt_to_phys(cpu, addr);
     if(abs_addr == static_cast<uint64_t>(-1)){
-        cerr << "panda_virt_to_phys " << addr << " errored" << endl;
+        cerr << "panda_virt_to_phys " << addr << " errored while reading labels" << endl;
         return 0;
     }
 
-    for(uint64_t i=0; i< size; i++){
+    for(uint32_t i=0; i< size; i++){
         uint64_t abs_addr_i = abs_addr+i;
         uint32_t nlabels = taint2_query_ram(abs_addr_i);
         if(!nlabels) continue;
@@ -148,7 +150,7 @@ int readLabels(CPUState* cpu, Address addr, target_ulong size, std::function<voi
         taint2_query_set_ram(abs_addr_i, labels.data());
 
         for(uint32_t label : labels){
-            callback(static_cast<target_ulong>(addr + i), label);
+            callback(addr + i, label);
         }
     }
 
@@ -165,13 +167,6 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
     event->ended = rr_get_guest_instr_count();
 
     cout << "EVENT exit " << event->toString() << endl;
-
-    //labeling
-    if(taint2_enabled()){
-        for(const auto& addr: event->memory.phisicalAddressesToTaint){
-            taint2_label_ram(addr, event->getLabel());
-        }
-    }
 
     //logging
     logEvent(*event, outfp);
@@ -197,10 +192,10 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     auto& current_tags = events.getTags(thread);
 
     if(current_event){
-        cout << "SYSENTER ENCOUNTERED " << sc.name << " while current_event was" << current_event->toString() << endl;
+        cout << "SYSENTER ENCOUNTERED "<< sc.callno <<" "<< sc.name << " while current_event was" << current_event->toString() << endl;
     }
 
-    cout << "SYSENTER " << sc.name << endl;
+    cout << "SYSENTER " << sc.callno << " " << sc.name << endl;
     auto new_event = make_shared<Event>();
     new_event->kind = EventKind::syscall;
     new_event->entrypoint = static_cast<uint32_t>(sc.callno);
@@ -253,8 +248,14 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
     FQThreadId thread = getFQThreadId(cpu);
     auto current_event = events.getEvent(thread);
 
+    if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
+       call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
+       call.syscall_no == 131){ // Skip NtFreeVirtualMemory (for simmetry)
+        return;
+    }
+
     if(!current_event){
-        cerr << "WARNING sysexit without any current event" << endl;
+        cerr << "WARNING sysexit no=" << sc.callno << " without any current event thread=" << thread.second <<  endl;
         return;
     }
 
@@ -298,7 +299,7 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
     }
 
     FQThreadId thread = getFQThreadId(cpu);
-    auto current_event = events.getEvent(thread);
+    std::shared_ptr<Event> current_event = events.getEvent(thread);
     auto& current_tags = events.getTags(thread);
 
     cout << "external event: " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
@@ -342,7 +343,7 @@ void external_event_exit(CPUState *cpu, uint32_t event_label){
     }
 
     auto thread = getFQThreadId(cpu);
-    auto current_event = events.getEvent(thread);
+    std::shared_ptr<Event> current_event = events.getEvent(thread);
     auto& current_tags = events.getTags(thread);
 
     //if(!current_event){
@@ -426,21 +427,22 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         return 0;
     }
 
-    auto thread = getFQThreadId(cpu);
+    FQThreadId thread = getFQThreadId(cpu);
     auto p_current_event = events.getEvent(thread);
 
     if(p_current_event){
-        hwaddr phisical_address = panda_virt_to_phys(cpu, addr);
-        bool translation_error = phisical_address == static_cast<hwaddr>(-1);
+        hwaddr physical_address = panda_virt_to_phys(cpu, addr);
+        bool translation_error = physical_address == static_cast<hwaddr>(-1);
+
         if(translation_error){
-            cerr << "Error when translating address " << addr << "to phyisical" << endl;
+            cerr << "Error when translating address " << addr << "to phyisical (won't taint)" << endl;
         }
 
         for(target_ulong i=0; i<size; i++){
             p_current_event->memory.write(addr+i, data[i]);
 
             if(!translation_error){
-                p_current_event->memory.phisicalAddressToTaint(phisical_address + i);
+                phisicalAddressesToTaint.insert(physical_address + i);
             }
         }
     }
@@ -475,6 +477,23 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
     }
 
+    return 0;
+}
+
+int systaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
+    (void) tb;
+
+    //labeling
+    FQThreadId thread = getFQThreadId(cpu);
+    std::shared_ptr<Event> current_event = events.getEvent(thread);
+
+    if(taint2_enabled() && current_event){
+        for(const auto& addr: phisicalAddressesToTaint){
+            taint2_label_ram(addr, current_event->getLabel());
+        }
+    }
+
+    phisicalAddressesToTaint.clear();
     return 0;
 }
 
@@ -542,6 +561,9 @@ bool init_plugin(void *self) {
 
     pcb.before_block_exec = sc_listener_returned_check_callback;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
+
+    pcb.after_block_exec = systaint_after_block_callback;
+    panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
 
     //pcb.asid_changed = asid_changed_callback;
     //panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);

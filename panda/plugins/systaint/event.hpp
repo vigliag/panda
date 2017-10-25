@@ -12,7 +12,6 @@ public:
     std::map<uint32_t, uint8_t> writeset;
     std::map<uint32_t, uint8_t> readset;
     std::map<uint32_t, std::set<uint32_t>> readsetDeps;
-    std::set<hwaddr> phisicalAddressesToTaint;
 
     CallMemAccessTracker(){
 
@@ -37,10 +36,6 @@ public:
     void clear(){
         writeset.clear();
         readset.clear();
-    }
-
-    void phisicalAddressToTaint(hwaddr addr){
-        phisicalAddressesToTaint.insert(addr);
     }
 };
 

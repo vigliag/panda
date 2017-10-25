@@ -119,6 +119,11 @@ LabelSetP label_set_union(LabelSetP ls1, LabelSetP ls2) {
         const std::set<uint32_t> *result = &(*it);
 
         memoized_unions.insert(std::make_pair(minmax, result));
+        if(result->size() > 1){
+            puts("BBBB");
+            puts("ccc");
+            puts("AAA\n");
+        }
         return result;
     } else if (ls1) {
         return ls1;
