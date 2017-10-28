@@ -121,18 +121,16 @@ bool sc_listener_translate_callback(CPUState *cpu, target_ulong pc) {
 #ifdef TARGET_I386
 
     // KNOWN BUGs:
-    // Only seems to work with llvm enabled
-    // sometimes we are unable to read the instruction from pc
-    // Spurious sysenters?
+    // - Only seems to work with llvm enabled or if TBs are flushed after initalization
+    // - sometimes we are unable to read the instruction from pc
+    // - Spurious sysenters?
 
+    // TODO: asid filtering:
     // Can we actually do this filtering? Problem: a given tb is translated only once
-    // if it is translated for a different untracked process.... TODO CHECK
+    // what if it is translated for a different untracked process.... TODO CHECK
     //if(!monitored_processes.count(panda_current_asid(cpu))){
     //    return false;
     //}
-
-    //temporarily disabling through this:
-    //return false;
 
     bool syscall_dectected = false;
 
