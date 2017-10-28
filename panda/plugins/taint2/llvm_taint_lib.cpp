@@ -157,11 +157,11 @@ bool PandaTaintFunctionPass::doInitialization(Module &M) {
         return true;
     }
 
-    PTV.deleteF = M.getFunction("taint_delete"),
-    PTV.mixF = M.getFunction("taint_mix"),
-    PTV.pointerF = M.getFunction("taint_pointer"),
-    PTV.mixCompF = M.getFunction("taint_mix_compute"),
-    PTV.parallelCompF = M.getFunction("taint_parallel_compute"),
+    PTV.deleteF = M.getFunction("taint_delete");
+    PTV.mixF = M.getFunction("taint_mix");
+    PTV.pointerF = M.getFunction("taint_pointer");
+    PTV.mixCompF = M.getFunction("taint_mix_compute");
+    PTV.parallelCompF = M.getFunction("taint_parallel_compute");
     PTV.copyF = M.getFunction("taint_copy");
     PTV.sextF = M.getFunction("taint_sext");
     PTV.selectF = M.getFunction("taint_select");

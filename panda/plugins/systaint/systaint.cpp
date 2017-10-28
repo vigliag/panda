@@ -112,6 +112,11 @@ static const char* outfile = nullptr;
 static bool automatically_add_processes = false;
 
 static bool extevents_as_primary = false;
+static bool only_taint_syscall_args = false;
+static bool use_candidate_pointers = true;
+
+static uint64_t target_end_count = 0;
+static uint64_t target_taint_at = 0;
 
 // Globals:
 //////////////
@@ -186,9 +191,14 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
 
     FQThreadId thread = getFQThreadId(cpu);
 
+    //take size and location of syscall parameters
+    CPUArchState *env = reinterpret_cast<CPUArchState*>(cpu->env_ptr);
+    uint32_t arg_start = env->regs[R_EDX] + 8;
+    std::size_t arg_len = sc.paramSize();
+
     //Filtering is already done on instruction exec callback
 
-    auto current_event = events.getEvent(thread);
+    std::shared_ptr<Event> current_event = events.getEvent(thread);
     auto& current_tags = events.getTags(thread);
 
     if(current_event){
@@ -200,6 +210,11 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     new_event->kind = EventKind::syscall;
     new_event->entrypoint = static_cast<uint32_t>(sc.callno);
     new_event->started = call.start;
+
+    if(use_candidate_pointers){
+        new_event->knownDataPointers.insert(arg_start);
+    }
+
     events.put_event(thread, new_event);
 
     if(current_tags.size()){
@@ -207,39 +222,24 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
         new_event->tags = current_tags;
     }
 
+    /* Fine grained tainting (only taint arguments) */
 
-    /* Fine grained tainting (only taint arguments)
-     * disabled for now in favor of tainting all memory accesses */
-#if 0
-    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
-    if(!taint2_enabled())
+    if(!only_taint_syscall_args || !taint2_enabled()){
         return;
+    }
 
-    //take size and location of syscall parameters
-    uint64_t arg_start = env->regs[R_EDX] + 8;
-    std::size_t arg_len = sc.paramSize();
-
-    //cout << "Reading taint from " << arg_start << " to " << arg_start + arg_len << " from event " << current_event << endl;
-    //readLabels(cpu, arg_start, arg_len, currentEventDependencyAdder);
-
-    // TODO taint EAX on sysExit (not required on windows, as return values are error messages)
-
-    /* We now clear the taint from these arguments, and taint them again with
-    the label of the current event. We do this to taint the pointers, so that 
-    anytime this syscall uses them to write to memory, the result is also 
-    tainted */ 
+    uint32_t taint_label = static_cast<uint32_t>(new_event->started);
 
     uint64_t arg_start_pa = panda_virt_to_phys(cpu, arg_start);
-    if(arg_start_pa == -1){
-        cout << "ERROR panda_virt_to_phys errored" <<endl;
+    if(arg_start_pa == static_cast<uint64_t>(-1)){
+        cout << "ERROR panda_virt_to_phys errored while translating " << arg_start_pa << endl;
         return;
     }
+
     cout << "Tainting syscall args with " << taint_label << endl ;
     for(std::size_t i=0; i<arg_len; i++){
-        taint2_delete_ram(arg_start_pa + i);
         taint2_label_ram_additive(arg_start_pa + i, taint_label);
     }
-#endif
 }
 
 void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
@@ -263,6 +263,8 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
         cout << "SYSCALL ignoring exit" << endl;
         return;
     }
+
+    // TODO taint EAX on sysExit (not required on windows, as return values are error messages)
 
     cout << "SYSCALL EVENT exit " << current_event->toString() << endl;
     finalize_current_event(cpu, thread);
@@ -327,7 +329,7 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
     }
 
 
-    if (!taint2_enabled() && !no_llvm) {
+    if (!taint2_enabled() && !no_llvm && !target_taint_at) {
         printf("enabling taint\n");
         taint2_enable_taint();
     }
@@ -417,6 +419,28 @@ void on_function_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
 // Memory access tracking 
 // ========================
 
+static bool addressIsNearCandidatePointer(const std::shared_ptr<Event>& p_curr_event, const target_ulong addr){
+    auto it_after = p_curr_event->knownDataPointers.upper_bound(addr);
+
+    if(it_after == p_curr_event->knownDataPointers.begin()){
+        //can happen if .begin() == .end(), or if there's no smaller pointer
+        puts("discard (no lower)");
+        return false;
+    } else {
+        it_after--;
+
+        target_ulong closest_known_pointer = *it_after;
+        if (addr - closest_known_pointer >= 0x1000){
+            //discard as the first candidate pointer is too distant
+            puts("discard (too distant)");
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     (void) pc;
@@ -438,10 +462,15 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             cerr << "Error when translating address " << addr << "to phyisical (won't taint)" << endl;
         }
 
+        bool do_taint = true;
+        if(use_candidate_pointers){
+            do_taint = addressIsNearCandidatePointer(p_current_event, addr);
+        }
+
         for(target_ulong i=0; i<size; i++){
             p_current_event->memory.write(addr+i, data[i]);
 
-            if(!translation_error){
+            if(do_taint && !translation_error){
                 phisicalAddressesToTaint.insert(physical_address + i);
             }
         }
@@ -463,19 +492,40 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     auto thread = getFQThreadId(cpu);
     auto p_current_event = events.getEvent(thread);
 
+
+
+    if(!p_current_event || !isUserSpaceAddress(addr)){
+        return 0;
+    }
+
     // If there's an event currently executing, track its reads to find dependencies
     // from previous syscalls
-    if(p_current_event && isUserSpaceAddress(addr)){
 
-        for(target_ulong i=0; i< size; i++){
-            p_current_event->memory.read(addr +i ,  data[i]);
+    if(use_candidate_pointers){
+        bool add_addr_to_candidate_pointers = addressIsNearCandidatePointer(p_current_event, addr);
+
+        if(add_addr_to_candidate_pointers){
+            uint32_t pointers_read = 0;
+            uint32_t* ptrptr = reinterpret_cast<target_ulong*>(buf);
+
+            // TODO not sure there's a point in reading more than a pointer at once
+            while(size - pointers_read * sizeof(target_ulong) <= sizeof(target_ulong)){
+                target_ulong ptr = ptrptr[pointers_read];
+                p_current_event->knownDataPointers.insert(ptr);
+                pointers_read++;
+            }
         }
-
-        readLabels(cpu, addr, size, [&p_current_event](uint32_t addr, uint32_t dep){
-            p_current_event->memory.readdep(addr, dep);
-        });
-
     }
+
+
+    for(target_ulong i=0; i< size; i++){
+        p_current_event->memory.read(addr +i ,  data[i]);
+    }
+
+    readLabels(cpu, addr, size, [&p_current_event](uint32_t addr, uint32_t dep){
+        p_current_event->memory.readdep(addr, dep);
+    });
+
 
     return 0;
 }
@@ -483,11 +533,18 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 int systaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     (void) tb;
 
-    //labeling
+    auto instr_count = rr_get_guest_instr_count();
+    if(target_end_count && instr_count > target_end_count){
+        rr_end_replay_requested = 1;
+    } else if(target_taint_at && instr_count > target_taint_at && !no_llvm && !taint2_enabled()){
+        taint2_enable_taint();
+    }
+
     FQThreadId thread = getFQThreadId(cpu);
     std::shared_ptr<Event> current_event = events.getEvent(thread);
 
-    if(taint2_enabled() && current_event){
+    //actual labeling
+    if(current_event && taint2_enabled() && (!only_taint_syscall_args || current_event->kind == EventKind::encoding)){
         for(const auto& addr: phisicalAddressesToTaint){
             taint2_label_ram(addr, current_event->getLabel());
         }
@@ -596,6 +653,19 @@ bool init_plugin(void *self) {
 
     panda_arg_list *args = panda_get_args("systaint");
     if (args != NULL) {
+
+        target_taint_at = panda_parse_uint64_opt(args, "taintat", 0, "instruction count when to enable tainting");
+        target_end_count = panda_parse_uint64_opt(args, "endat", 0, "instruction count when to end the replay");
+
+        only_taint_syscall_args = panda_parse_bool_opt(args, "only_syscall_args", "only taint syscall arguments");
+        if(only_taint_syscall_args){
+            std::cout << "Only tainting syscall args" << std::endl;
+        }
+
+        use_candidate_pointers = only_taint_syscall_args;
+        if(use_candidate_pointers){
+            std::cout << "Using candidate pointers" << std::endl;
+        }
 
         const char* tracked_asids = panda_parse_string_opt(args, "asids", nullptr, "list of asids to track");
         if(tracked_asids){

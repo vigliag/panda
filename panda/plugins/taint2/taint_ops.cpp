@@ -394,7 +394,7 @@ void taint_host_memcpy(
     taint_log("hostmemcpy: %s[%lx+%lx] <- %s[%lx] (offsets %lx <- %lx) ",
             shad_dest->name(), dest, size, shad_src->name(), src,
             dest_offset, src_offset);
-    taint_log_labels(shad_src, src, size);
+    taint_log_labels(shad_src, src, size); //FAILURE HERE. PROBABLY GOING TO DEREFERENCE NULL labelsetp
     FastShad::copy(shad_dest, addr_dest, shad_src, addr_src, size);
 }
 

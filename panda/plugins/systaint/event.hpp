@@ -53,6 +53,8 @@ enum class EventKind {
 
 struct Event {
     CallMemAccessTracker memory;
+    std::set<target_ulong> knownDataPointers;
+
     uint64_t started = 0;
     uint64_t ended = 0;
     uint32_t ret_addr = 0;

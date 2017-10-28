@@ -29,7 +29,10 @@ Addr make_greg(uint64_t r, uint16_t off) {
 }
 
 extern bool debug_taint;
-target_ulong debug_asid = 0;
+static target_ulong debug_asid = 0;
+
+constexpr uint64_t CPU_LOG_TAINT_MASK = CPU_LOG_TAINT_OPS | CPU_LOG_LLVM_IR | CPU_LOG_TB_IN_ASM | CPU_LOG_EXEC;
+//constexpr uint64_t CPU_LOG_TAINT_MASK = CPU_LOG_TAINT_OPS | CPU_LOG_EXEC;
 
 // Implements taint2:debug plugin arg. Turns on -d llvm_ir,taint_ops,in_asm,exec
 // for that specific asid.
@@ -37,9 +40,9 @@ extern "C"
 int asid_changed_callback(CPUState *env, target_ulong oldval, target_ulong newval) {
     if (debug_asid) {
         if (newval == debug_asid) {
-            qemu_loglevel |= CPU_LOG_TAINT_OPS | CPU_LOG_LLVM_IR | CPU_LOG_TB_IN_ASM | CPU_LOG_EXEC;
+            qemu_loglevel |= CPU_LOG_TAINT_MASK;
         } else {
-            qemu_loglevel &= ~(CPU_LOG_TAINT_OPS | CPU_LOG_LLVM_IR | CPU_LOG_TB_IN_ASM | CPU_LOG_EXEC);
+            qemu_loglevel &= ~(CPU_LOG_TAINT_MASK);
         }
     }
     return 0;
@@ -52,7 +55,7 @@ static void start_debugging() {
         printf("taint2: ENABLING DEBUG MODE for asid 0x" TARGET_FMT_lx "\n",
                 debug_asid);
     }
-    qemu_loglevel |= CPU_LOG_TAINT_OPS | CPU_LOG_LLVM_IR | CPU_LOG_TB_IN_ASM | CPU_LOG_EXEC;
+    qemu_loglevel |= CPU_LOG_TAINT_MASK;
 }
 
 extern ShadowState *shadow;
@@ -85,7 +88,7 @@ static void tp_labelset_put(const Addr &a, LabelSetP ls) {
 }
 
 // used to keep track of labels that have been applied
-std::set<uint32_t> labels_applied;
+static std::set<uint32_t> labels_applied;
 
 // label -- associate label l, and only label l, with address a. any previous
 // labels applied to the address are removed.

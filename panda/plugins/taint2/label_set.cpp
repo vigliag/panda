@@ -13,6 +13,10 @@ extern "C" {
 
 #include "label_set.h"
 
+//vigliag: debug TODO remove
+#include <iostream>
+
+
 template<typename T>
 class ArenaAlloc {
 private:
@@ -120,9 +124,8 @@ LabelSetP label_set_union(LabelSetP ls1, LabelSetP ls2) {
 
         memoized_unions.insert(std::make_pair(minmax, result));
         if(result->size() > 1){
-            puts("BBBB");
-            puts("ccc");
-            puts("AAA\n");
+            std::cout << "SET UNION: " << *result->begin() << std::endl;
+            puts("AAAA");
         }
         return result;
     } else if (ls1) {
