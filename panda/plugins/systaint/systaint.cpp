@@ -294,7 +294,7 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
             //TODO
             //don't know why it is needed. Apparently some tbs are marked as translated
             //and don't go into syscall_listener's translate callback again
-            panda_do_flush_tb();
+            //panda_do_flush_tb();
         } else {
             return;
         }

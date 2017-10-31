@@ -71,7 +71,7 @@ using Asid = target_ulong;
 extern std::set<Asid> monitored_processes;
 
 // A SyscallPCpoint is added when a sysenter is translated, so that we can then recognize it when the sysenter actually happens
-static std::set<std::pair <target_ulong, target_ulong>> syscallPCpoints;
+static std::set<target_ulong> syscallPCpoints;
 
 /* When we execute an instruction (for which translate_callback returned true),
 we check if it was the Sysenter we saw before */
@@ -86,7 +86,7 @@ int sc_listener_exec_callback(CPUState *cpu, target_ulong pc) {
     if(!monitored_processes.count(current_asid))
         return 0;
 
-    if (!syscallPCpoints.count(std::make_pair(pc,current_asid)))
+    if (!syscallPCpoints.count(pc))
         return 0;
 
     // Retrieve the syscall definition (ignore undefined syscalls)
@@ -143,22 +143,25 @@ bool sc_listener_translate_callback(CPUState *cpu, target_ulong pc) {
 
     // Check if the instruction is syscall (0F 05)
     if (buf[0]== 0x0F && buf[1] == 0x05) {
-        std::cout << "SYSCALL "<< std::endl;
+        std::cout << "translating SYSCALL";
         syscall_dectected = true;
     }
     // Check if the instruction is int 0x80 (CD 80)
     else if (buf[0]== 0xCD && buf[1] == 0x80) {
-        std::cout << "SYSCALL 80"<< std::endl;
+        std::cout << "translating SYSCALL 80";
         syscall_dectected = true;
     }
     // Check if the instruction is sysenter (0F 34)
     else if (buf[0]== 0x0F && buf[1] == 0x34) {
-        std::cout << "SYSENTER" << std::endl;
+        std::cout << "translating SYSENTER";
         syscall_dectected = true;
     }
 
     if(syscall_dectected){
-        syscallPCpoints.insert(std::make_pair(pc, panda_current_asid(cpu)));
+        target_ulong current_asid = panda_current_asid(cpu);
+        std:: cout << ", pc=" << pc << " asid=" << current_asid << std::endl;
+
+        syscallPCpoints.insert(pc);
         return true;
 
     } else {
