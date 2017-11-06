@@ -24,4 +24,7 @@ void pandalog_callstack_free(Panda__CallStack *cs);
 
 int get_call_entries(CallstackStackEntry* entries, int n, CPUState *cpu);
 
+void callstack_whitelist_on();
+void callstack_whitelist_asid(target_ulong asid);
+
 #endif

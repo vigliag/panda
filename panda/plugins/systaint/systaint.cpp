@@ -136,9 +136,21 @@ static EventTracker events;
 
 static std::set<hwaddr> phisicalAddressesToTaint;
 
+
+// Wrappers:
+
+
+static void enableTaint(){
+    taint2_enable_taint();
+}
+
+static int taintEnabled(){
+    return taint2_enabled();
+}
+
 /** Reads the labels for a given memory range, executing the callback function for each */
-int readLabels(CPUState* cpu, Address addr, target_ulong size, std::function<void(Address, Label)> callback){
-    if(!taint2_enabled()) return 0;
+static int readLabels(CPUState* cpu, Address addr, target_ulong size, std::function<void(Address, Label)> callback){
+    if(!taintEnabled()) return 0;
 
     uint64_t abs_addr = panda_virt_to_phys(cpu, addr);
     if(abs_addr == static_cast<uint64_t>(-1)){
@@ -162,6 +174,18 @@ int readLabels(CPUState* cpu, Address addr, target_ulong size, std::function<voi
     return 1;
 }
 
+const bool LABEL_ADDITIVE = true;
+
+static void writeLabelPA(uint64_t pa_addr, size_t size, Label label, bool additive = false){
+    for(size_t i = 0; i < size; i++){
+        if(additive){
+            taint2_label_ram_additive(pa_addr + i, label);
+        } else {
+            taint2_label_ram(pa_addr +i, label);
+        }
+    }
+}
+
 #ifdef TARGET_I386
 
 static void finalize_current_event(CPUState* cpu, FQThreadId thread){
@@ -172,6 +196,12 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
     event->ended = rr_get_guest_instr_count();
 
     cout << "EVENT exit " << event->toString() << endl;
+
+    std::vector<target_ulong> current_callstack(10);
+    uint32_t callstacksize = get_callers(current_callstack.data(), static_cast<int>(current_callstack.size()), cpu);
+    current_callstack.resize(callstacksize);
+
+    event->callstack = std::move(current_callstack);
 
     //logging
     logEvent(*event, outfp);
@@ -224,7 +254,7 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
 
     /* Fine grained tainting (only taint arguments) */
 
-    if(!only_taint_syscall_args || !taint2_enabled()){
+    if(!only_taint_syscall_args || !taintEnabled()){
         return;
     }
 
@@ -237,9 +267,8 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     }
 
     cout << "Tainting syscall args with " << taint_label << endl ;
-    for(std::size_t i=0; i<arg_len; i++){
-        taint2_label_ram_additive(arg_start_pa + i, taint_label);
-    }
+    writeLabelPA(arg_start_pa, arg_len, taint_label, LABEL_ADDITIVE);
+
 }
 
 void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
@@ -290,11 +319,6 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
         if(automatically_add_processes){
             cout << "TRACKING " << asid << " instcount " <<  rr_get_guest_instr_count() << endl;
             monitored_processes.insert(asid);
-
-            //TODO
-            //don't know why it is needed. Apparently some tbs are marked as translated
-            //and don't go into syscall_listener's translate callback again
-            //panda_do_flush_tb();
         } else {
             return;
         }
@@ -329,9 +353,9 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
     }
 
 
-    if (!taint2_enabled() && !no_llvm && !target_taint_at) {
+    if (!taintEnabled() && !no_llvm && !target_taint_at) {
         printf("enabling taint\n");
-        taint2_enable_taint();
+        enableTaint();
     }
 }
 
@@ -492,8 +516,6 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     auto thread = getFQThreadId(cpu);
     auto p_current_event = events.getEvent(thread);
 
-
-
     if(!p_current_event || !isUserSpaceAddress(addr)){
         return 0;
     }
@@ -536,17 +558,18 @@ int systaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     auto instr_count = rr_get_guest_instr_count();
     if(target_end_count && instr_count > target_end_count){
         rr_end_replay_requested = 1;
-    } else if(target_taint_at && instr_count > target_taint_at && !no_llvm && !taint2_enabled()){
-        taint2_enable_taint();
+    } else if(target_taint_at && instr_count > target_taint_at && !no_llvm && !taintEnabled()){
+        enableTaint();
     }
 
     FQThreadId thread = getFQThreadId(cpu);
     std::shared_ptr<Event> current_event = events.getEvent(thread);
 
     //actual labeling
-    if(current_event && taint2_enabled() && (!only_taint_syscall_args || current_event->kind == EventKind::encoding)){
+    Label label = current_event->getLabel();
+    if(current_event && taintEnabled() && (!only_taint_syscall_args || current_event->kind == EventKind::encoding)){
         for(const auto& addr: phisicalAddressesToTaint){
-            taint2_label_ram(addr, current_event->getLabel());
+            writeLabelPA(addr, 1, label);
         }
     }
 
@@ -582,18 +605,19 @@ std::set<target_ulong> parse_addr_list(const char* addrs){
     return res;
 }
 
-/*int asid_changed_callback(CPUState* cpu, uint32_t oldasid, uint32_t newasid){
+int asid_changed_callback(CPUState* cpu, uint32_t oldasid, uint32_t newasid){
+    (void) cpu;
+    (void) oldasid;
+
     if(monitored_processes.count(newasid)){
-        if (!taint2_enabled() && !no_llvm) {
+        if (!taintEnabled() && !no_llvm) {
             printf("enabling taint\n");
-            taint2_enable_taint();
-        }
-    } else {
-        if (taint2_enabled() && !no_llvm){
-            taint2_
+            enableTaint();
         }
     }
-}*/
+
+    return 0;
+}
 
 void *plugin_self;
 bool init_plugin(void *self) {
@@ -622,8 +646,8 @@ bool init_plugin(void *self) {
     pcb.after_block_exec = systaint_after_block_callback;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
 
-    //pcb.asid_changed = asid_changed_callback;
-    //panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
+    pcb.asid_changed = asid_changed_callback;
+    panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
 
     panda_require("taint2");
     assert(init_taint2_api());
@@ -685,8 +709,12 @@ bool init_plugin(void *self) {
 
         extevents_as_primary = panda_parse_bool_opt(args, "extevents", "use syscalls as primary events");
 
-        //fast = panda_parse_bool_opt(args, "fast", "turn on and off taint when asid changes");
         outfile = panda_parse_string_opt(args, "outfile", nullptr, "an output file");
+
+        if(!outfile && !pandalog){
+            std::cout << "Please pass an 'outfile' parameter, or enable pandalog" << std::endl;
+            return false;
+        }
     }
 
     if(outfile){
@@ -705,6 +733,7 @@ bool init_plugin(void *self) {
         cout << "tracking process " << i << endl;
     }
 
+    //TODO now probably useless
     panda_do_flush_tb();
     panda_enable_precise_pc();
     panda_enable_tb_chaining();

@@ -196,6 +196,7 @@ public:
     void visitMemCpyInst(MemTransferInst &I);
     void visitMemMoveInst(MemTransferInst &I);
     void visitMemSetInst(MemSetInst &I);
+
 };
 
 /* PandaTaintFunctionPass class

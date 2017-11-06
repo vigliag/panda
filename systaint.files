@@ -2576,6 +2576,7 @@ panda/plugins/scissors/scissors.c
 panda/plugins/scissors/scissors.c
 panda/plugins/scissors/scissors.c
 panda/plugins/scissors/scissors.c
+panda/plugins/stringsearch/USAGE.md
 panda/plugins/stringsearch/stringsearch.cpp
 panda/plugins/stringsearch/stringsearch.cpp
 panda/plugins/stringsearch/stringsearch.cpp

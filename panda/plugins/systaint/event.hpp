@@ -60,7 +60,10 @@ struct Event {
     uint32_t ret_addr = 0;
     uint32_t entrypoint = 0;
     uint32_t label = 0;
+
     std::vector<uint32_t> tags;
+    std::vector<target_ulong> callstack;
+
     FQThreadId thread;
     EventKind kind = EventKind::unknown;
     uint32_t parent = 0;

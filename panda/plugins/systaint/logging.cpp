@@ -137,8 +137,9 @@ void logEvent(const Event& event, FILE* filepointer){
         assert(pcbd.len == 0 || pcbd.data != nullptr);
 
         reads[i].value = pcbd;
-
         reads[i].address = buffer.base;
+        reads[i].argno = 0;
+
         readPtrs[i] = &reads[i];
         i++;
     }
@@ -148,6 +149,9 @@ void logEvent(const Event& event, FILE* filepointer){
 
     pbEvent.n_reads = i;
     pbEvent.reads = readPtrs;
+
+    pbEvent.n_callstack = event.callstack.size();
+    pbEvent.callstack = const_cast<uint32_t*>(event.callstack.data());
 
     // Same for writes
     Panda__SysMemoryLocation *writes = new Panda__SysMemoryLocation[writeBuffers.size()];

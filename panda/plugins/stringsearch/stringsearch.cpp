@@ -66,14 +66,14 @@ struct fullstack {
     target_ulong asid;
 };
 
-std::map<prog_point,fullstack> matchstacks;
-std::map<prog_point,match_strings> matches;
-std::map<prog_point,string_pos> read_text_tracker;
-std::map<prog_point,string_pos> write_text_tracker;
-uint8_t tofind[MAX_STRINGS][MAX_STRLEN];
-uint32_t strlens[MAX_STRINGS];
-int num_strings = 0;
-int n_callers = 16;
+static std::map<prog_point,fullstack> matchstacks;
+static std::map<prog_point,match_strings> matches;
+static std::map<prog_point,string_pos> read_text_tracker;
+static std::map<prog_point,string_pos> write_text_tracker;
+static uint8_t tofind[MAX_STRINGS][MAX_STRLEN];
+static uint32_t strlens[MAX_STRINGS];
+static int num_strings = 0;
+static int n_callers = 16;
 
 // this creates BOTH the global for this callback fn (on_ssm_func)
 // and the function used by other plugins to register a fn (add_on_ssm)

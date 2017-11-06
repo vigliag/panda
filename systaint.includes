@@ -250,6 +250,7 @@ panda/plugins/fn_memlogger
 panda/plugins/taint2/tests/full_system/network/query_receive
 panda/plugins/syscalls_r
 /home/vigliag/thesis/llvm/include/
+/home/vigliag/thesis/llvm/include/llvm/
 ../panda1/qemu/panda_tools/dynslice
 panda/tools
 panda/tools/dynslice

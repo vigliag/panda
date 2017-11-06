@@ -116,7 +116,7 @@ enum StackidStrategy {
 };
 
 // Default strategy is ASID, the others should be considered experimental
-StackidStrategy stackid_strategy = ASID;
+static StackidStrategy stackid_strategy = ASID;
 
 /**
  * Gets the current thread identifier on 32bit windows NT systems
@@ -203,7 +203,7 @@ static stackid get_stackid_from_closest_seen_stack(CPUState* cpu) {
     }
 
     // Is the closest_known_sp close enough?
-    int diff = std::abs(current_sp - closest_known_sp);
+    uint32_t diff = static_cast<uint32_t>(std::abs(current_sp - closest_known_sp));
     if (diff < MAX_STACK_DIFF) {
         last_seen_sp = current_sp;
         last_seen_sp_asid = current_asid;
@@ -231,17 +231,20 @@ static stackid get_stackid(CPUState* cpu) {
             return std::make_pair(panda_current_asid(cpu), getThreadID(cpu));
         }
     default:
-        assert(false);
+        assert(0);
     }
 }
 
 /**
-Disassembles a block of code, then returns the instr_type of the last
-instruction (CALL, RET, or UNKNOWN)
+ * Disassembles a block of code, then returns the instr_type of the last
+ * instruction (CALL, RET, or UNKNOWN)
 */
-instr_type disas_block(CPUArchState* env, target_ulong pc, int size) {
+static instr_type disas_block(CPUArchState* env, target_ulong pc, uint32_t size) {
+
+    CPUState *cpu = ENV_GET_CPU(env);
+
     unsigned char *buf = (unsigned char *) malloc(size);
-    int err = panda_virtual_memory_rw(ENV_GET_CPU(env), pc, buf, size, 0);
+    int err = panda_virtual_memory_rw(cpu, pc, buf, size, 0);
     if (err == -1) printf("Couldn't read TB memory!\n");
     instr_type res = INSTR_UNKNOWN;
 

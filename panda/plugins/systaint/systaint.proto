@@ -2,6 +2,7 @@ message SysMemoryLocation {
    required uint32 address = 1;
    required bytes value = 2;
    repeated uint32 dependencies = 3 [packed=true];
+   required uint32 argno = 4;
 }
 
 message SysFnCall {
@@ -15,6 +16,7 @@ message SysFnCall {
    required uint32 parent = 8;
    required uint32 pid = 9;
    required uint32 thread = 10;
+   repeated uint32 callstack = 11;
 }
 
 optional SysFnCall encfncall = 57;
