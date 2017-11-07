@@ -141,7 +141,7 @@ clean-panda:
 
 #ifdef CONFIG_QTRACE_TAINT
 obj-y += panda/tcg-taint/helpers.o
-obj-y += panda/tcg-taint/tcg-taint.c
+obj-y += panda/tcg-taint/tcg-taint.o
 #endif
 
 ifdef CONFIG_LLVM

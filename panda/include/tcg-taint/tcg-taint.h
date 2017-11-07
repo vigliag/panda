@@ -1,4 +1,5 @@
 #pragma once
+#include <stdbool.h>
 
 /* External variable that indicates whether taint propagation is currently
    enabled or not */
