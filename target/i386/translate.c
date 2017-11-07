@@ -4606,9 +4606,27 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 } else {
                     opreg = rm;
                 }
+                //VIGLIAG QTRACE
+                //here qtrace called tcg_gen_qtrace_clearR if the op was clearing the register
+                //the called function is added in tcg-op.h, which gets included in this file
+#ifdef CONFIG_QTRACE_TAINT
+                /* Check for SUB/SBB operations involving the same register as
+                   source and destination; in these situations, taint status
+                   must be clear.
+
+                   We cannot process this case in the TCG, as the translator is
+                   going to move the source and destinations (that in this case
+                   are identical) into *different* temporary registers, thus we
+                   won't be able to realize their are actually the same
+                   register. */
+                if (reg == opreg && (op == OP_SBBL || op == OP_SUBL)) {
+                    tcg_gen_qtrace_clearR(cpu_regs[reg]);
+                }
+#endif
                 gen_op_mov_v_reg(ot, cpu_T1, reg);
                 gen_op(s, op, ot, opreg);
                 break;
+
             case 1: /* OP Gv, Ev */
                 modrm = cpu_ldub_code(env, s->pc++);
                 mod = (modrm >> 6) & 3;

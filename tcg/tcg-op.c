@@ -643,6 +643,11 @@ void tcg_gen_deposit_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2,
     uint32_t mask;
     TCGv_i32 t1;
 
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_mov(ret, arg1);
+    tcg_gen_qtrace_deposit(ret, arg1, arg2, ofs, len);
+#endif
+
     tcg_debug_assert(ofs < 32);
     tcg_debug_assert(len > 0);
     tcg_debug_assert(len <= 32);
@@ -913,6 +918,12 @@ void tcg_gen_sub2_i32(TCGv_i32 rl, TCGv_i32 rh, TCGv_i32 al,
 
 void tcg_gen_mulu2_i32(TCGv_i32 rl, TCGv_i32 rh, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_mulu2_i32, rl, arg1, arg2);
+    tcg_gen_qtrace_combine3(INDEX_op_mulu2_i32, rh, arg1, arg2);
+#endif
+
     if (TCG_TARGET_HAS_mulu2_i32) {
         tcg_gen_op4_i32(INDEX_op_mulu2_i32, rl, rh, arg1, arg2);
     } else if (TCG_TARGET_HAS_muluh_i32) {
@@ -2577,6 +2588,10 @@ void tcg_gen_extr32_i64(TCGv_i64 lo, TCGv_i64 hi, TCGv_i64 arg)
 
 void tcg_gen_goto_tb(unsigned idx)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_endtb();
+#endif
+
     /* We only support two chained exits.  */
     tcg_debug_assert(idx <= 1);
 #ifdef CONFIG_DEBUG_TCG

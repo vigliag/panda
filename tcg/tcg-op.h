@@ -26,6 +26,16 @@
 #include "exec/helper-proto.h"
 #include "exec/helper-gen.h"
 
+#ifdef CONFIG_QTRACE_TAINT
+static inline void tcg_gen_qtrace_mov(TCGv_i32 ret, TCGv_i32 arg);
+static inline void tcg_gen_qtrace_clearR(TCGv_i32 ret);
+static inline void tcg_gen_qtrace_combine3(TCGOpcode opc, TCGv_i32 ret,
+                                           TCGv_i32 arg1, TCGv_i32 arg2);
+static inline void tcg_gen_qtrace_deposit(TCGv_i32 ret, TCGv_i32 arg1,
+                                          TCGv_i32 arg, unsigned int ofs,
+                                          unsigned int len);
+#endif
+
 /* Basic output routines.  Not for general consumption.  */
 
 void tcg_gen_op1(TCGContext *, TCGOpcode, TCGArg);
@@ -328,18 +338,28 @@ void tcg_gen_bswap32_i32(TCGv_i32 ret, TCGv_i32 arg);
 
 static inline void tcg_gen_discard_i32(TCGv_i32 arg)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_clearR(arg);
+#endif
     tcg_gen_op1_i32(INDEX_op_discard, arg);
 }
 
 static inline void tcg_gen_mov_i32(TCGv_i32 ret, TCGv_i32 arg)
 {
     if (!TCGV_EQUAL_I32(ret, arg)) {
+#ifdef CONFIG_QTRACE_TAINT
+        tcg_gen_qtrace_mov(ret, arg);
+#endif
         tcg_gen_op2_i32(INDEX_op_mov_i32, ret, arg);
     }
+
 }
 
 static inline void tcg_gen_movi_i32(TCGv_i32 ret, int32_t arg)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_clearR(ret);
+#endif
     tcg_gen_op2i_i32(INDEX_op_movi_i32, ret, arg);
 }
 
@@ -393,16 +413,25 @@ static inline void tcg_gen_st_i32(TCGv_i32 arg1, TCGv_ptr arg2,
 
 static inline void tcg_gen_add_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_add_i32, ret, arg1, arg2);
+#endif
     tcg_gen_op3_i32(INDEX_op_add_i32, ret, arg1, arg2);
 }
 
 static inline void tcg_gen_sub_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_sub_i32, ret, arg1, arg2);
+#endif
     tcg_gen_op3_i32(INDEX_op_sub_i32, ret, arg1, arg2);
 }
 
 static inline void tcg_gen_and_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_and_i32, ret, arg1, arg2);
+#endif
     tcg_gen_op3_i32(INDEX_op_and_i32, ret, arg1, arg2);
 }
 
@@ -776,8 +805,15 @@ static inline void tcg_gen_insn_start(target_ulong pc, target_ulong a1,
 # error "Unhandled number of operands to insn_start"
 #endif
 
+#ifdef CONFIG_QTRACE_TAINT
+#include "tcg-taint/tcg-op.h"
+#endif
+
 static inline void tcg_gen_exit_tb(uintptr_t val)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_endtb();
+#endif
     tcg_gen_op1i(INDEX_op_exit_tb, val);
 }
 
@@ -827,56 +863,89 @@ void tcg_gen_qemu_st_i64(TCGv_i64, TCGv, TCGArg, TCGMemOp);
 
 static inline void tcg_gen_qemu_ld8u(TCGv ret, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_ld(ret, addr, 8);
+#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_UB);
 }
 
 static inline void tcg_gen_qemu_ld8s(TCGv ret, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_ld(ret, addr, 8);
+#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_SB);
 }
 
 static inline void tcg_gen_qemu_ld16u(TCGv ret, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_ld(ret, addr, 16);
+#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_TEUW);
 }
 
 static inline void tcg_gen_qemu_ld16s(TCGv ret, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_ld(ret, addr, 16);
+#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_TESW);
 }
 
 static inline void tcg_gen_qemu_ld32u(TCGv ret, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_ld(ret, addr, 32);
+#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_TEUL);
 }
 
 static inline void tcg_gen_qemu_ld32s(TCGv ret, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_ld(ret, addr, 32);
+#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_TESL);
 }
 
 static inline void tcg_gen_qemu_ld64(TCGv_i64 ret, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_ld_i64(ret, addr, 64);
+#endif
     tcg_gen_qemu_ld_i64(ret, addr, mem_index, MO_TEQ);
 }
 
 static inline void tcg_gen_qemu_st8(TCGv arg, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_st(arg, addr, 8);
+#endif
     tcg_gen_qemu_st_tl(arg, addr, mem_index, MO_UB);
 }
 
 static inline void tcg_gen_qemu_st16(TCGv arg, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_st(arg, addr, 16);
+#endif
     tcg_gen_qemu_st_tl(arg, addr, mem_index, MO_TEUW);
 }
 
 static inline void tcg_gen_qemu_st32(TCGv arg, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_st(arg, addr, 32);
+#endif
     tcg_gen_qemu_st_tl(arg, addr, mem_index, MO_TEUL);
 }
 
 static inline void tcg_gen_qemu_st64(TCGv_i64 arg, TCGv addr, int mem_index)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_qemu_st_i64(arg, addr, 64);
+#endif
     tcg_gen_qemu_st_i64(arg, addr, mem_index, MO_TEQ);
 }
 

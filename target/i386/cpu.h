@@ -1363,6 +1363,11 @@ static inline void cpu_x86_load_seg_cache(CPUX86State *env,
 #error HF_CPL_MASK is hardcoded
 #endif
             env->hflags = (env->hflags & ~HF_CPL_MASK) | cpl;
+            //VIGLIAG QTRACE
+            //around here qtrace enables/disables the taint engine, depending on the fact the cpl was 0 (kernel space) or not.
+            //I'll try to move the check later on, at translation time if possible
+            //the good thing of having the callback here was that we have both the old and new cpl
+            //writing a generic panda callback could also be an idea
         }
         new_hflags = (env->segs[R_SS].flags & DESC_B_MASK)
             >> (DESC_B_SHIFT - HF_SS32_SHIFT);
