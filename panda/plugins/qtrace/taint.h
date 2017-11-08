@@ -9,11 +9,11 @@
 
 /* External variable that indicates whether taint propagation is currently
    enabled or not */
-extern bool qtrace_taint_enabled;
+extern bool qtrace_taint_instrumentation_enabled;
 
 /* "true" when generating instrumentation micro-ops. This flag is necessary to
    avoid instrumentation of our own code (and thus possible endless loops) */
-extern bool qtrace_instrument;
+extern bool qtrace_in_instrumentation;
 
 /* Set a taint label for a CPU register */
 void qtrace_taint_register(CPUArchState *env, bool istmp,

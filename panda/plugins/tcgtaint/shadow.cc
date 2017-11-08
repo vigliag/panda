@@ -2,10 +2,10 @@
 // Copyright 2013, Roberto Paleari <roberto@greyhats.it>
 //
 
-#include "qtrace/taint/shadow.h"
+#include "shadow.hpp"
 
 #include <algorithm>
-#include <cassert>
+#include <assert.h>
 
 void ShadowRegister::set(const ShadowRegister &other) {
   for (int i = 0; i < std::min(size_, other.size_); i++) {

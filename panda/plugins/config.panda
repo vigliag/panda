@@ -20,3 +20,4 @@ memsavep
 fn_memlogger
 sysevent
 sysrecstarter
+tcgtaint

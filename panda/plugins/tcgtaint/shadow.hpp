@@ -11,7 +11,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "qtrace/common.h"
+using target_ulong = uint32_t;
 
 //
 // An instance of the TaintLocation class represents a tainted memory location
@@ -58,6 +58,10 @@ public:
   // Remove all taint labels
   inline void clear() {
     labels_.clear();
+  }
+
+  inline const std::set<int>& getLabels(){
+    return labels_;
   }
 
 private:

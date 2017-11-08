@@ -2,12 +2,14 @@
 // Copyright 2014, Roberto Paleari <roberto@greyhats.it>
 //
 
-#include "qtrace/taint/taintengine.h"
-
+#include <assert.h>
 #include <algorithm>
 
-//#include "qtrace/context.h"
-#include "qtrace/logging.h"
+#include "tcg-taint/tcg-taint.h"
+#include "taintengine.hpp"
+#include "shadow.hpp"
+
+#include "../qtrace/logging.h"
 
 #define REGCHR(x)    ((x) ? 't' : 'c')
 #define REGNAME(obj) \
@@ -15,23 +17,21 @@
 #define REGTAINT(obj) \
   ((obj)->isTainted() ? 'T' : 'C')
 
-bool qtrace_taint_enabled = false;
-bool qtrace_instrument = false;
 
-void TaintEngine::setEnabled(bool status) {
-  qtrace_taint_enabled = status;
-}
+//void TaintEngine::setEnabled(bool status) {
+//  qtrace_taint_enabled = status;
+//}
 
-void TaintEngine::setUserEnabled(bool status) {
-  taint_user_enabled_ = status;
-  if (!status) {
-    setEnabled(false);
-  }
-}
+//void TaintEngine::setUserEnabled(bool status) {
+//  taint_user_enabled_ = status;
+//  if (!status) {
+//    setEnabled(false);
+//  }
+//}
 
-bool TaintEngine::isUserEnabled() {
-  return taint_user_enabled_;
-}
+//bool TaintEngine::isUserEnabled() {
+//  return taint_user_enabled_;
+//}
 
 void TaintEngine::setRegisterName(target_ulong regno, const char *name) {
   ShadowRegister *reg = getRegister(false, regno);
@@ -57,8 +57,14 @@ bool TaintEngine::getRegisterIdByName(const char *name,
 }
 
 ShadowRegister* TaintEngine::getRegister(bool istmp, target_ulong reg) {
-  assert((istmp && reg < NUM_TMP_REGS) || reg < NUM_CPU_REGS);
-  return istmp ? &tmpregs_[reg] : &cpuregs_[reg];
+    //TODO(vigliag) FIXME ASAP to fail gracefully
+    if(istmp){
+        assert(reg < NUM_TMP_REGS);
+        return &tmpregs_[reg];
+    } else {
+        assert(reg < NUM_CPU_REGS);
+        return &cpuregs_[reg];
+    }
 }
 
 void TaintEngine::setTaintedRegister(int label, bool istmp,
@@ -264,4 +270,13 @@ void TaintEngine::copyMemoryLabels(std::set<int> &labels,
       loc->copy(labels);
     }
   }
+}
+
+//added to allow for a c-compatible api
+const std::set<int>* TaintEngine::getMemoryLabels(target_ulong addr) const {
+  if (mem_.isTaintedAddress(addr)) {
+    TaintLocation *loc = mem_.getTaintLocation(addr);
+    return &loc->getLabels();
+  }
+  return nullptr;
 }

@@ -3,10 +3,20 @@
 
 /* External variable that indicates whether taint propagation is currently
    enabled or not */
-extern bool qtrace_taint_enabled;
+extern bool qtrace_taint_instrumentation_enabled;
    
 /* "true" when generating instrumentation micro-ops. This flag is necessary to
     avoid instrumentation of our own code (and thus possible endless loops) */
-extern bool qtrace_instrument;
+extern bool qtrace_in_instrumentation;
 
-void tcg_taint_enable(void);
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void tcg_taint_instrumentation_init(void);
+void tcg_taint_instrumentation_enable(void);
+void tcg_taint_instrumentation_disable(void);
+
+#ifdef __cplusplus
+}
+#endif

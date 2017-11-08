@@ -10,10 +10,11 @@
 #include <set>
 #include <memory>
 
-#include "qtrace/taint/shadow.h"
 
-const int NUM_CPU_REGS = 16;
-const int NUM_TMP_REGS = 512;
+#include "shadow.hpp"
+
+const int NUM_CPU_REGS = 16;    //CPU_NB_REGS in cpu.h
+const int NUM_TMP_REGS = 512;   //TCG_MAX_TEMPS in tcg.h
 
 //
 // The TaintEngine class implements the logic of the taint engine.
@@ -27,17 +28,17 @@ class TaintEngine {
   explicit TaintEngine() : taint_user_enabled_(true) {}
 
   // Enable/disable the taint propagation engine
-  void setEnabled(bool status);
+  // void setEnabled(bool status);
 
   // Set the "global" status of the taint propagation engine. This is different
   // from setEnabled(): the former is used to selectively enable/disable
   // taint-tracking during execution (e.g., enable only in ring-0), while the
   // latter lets the user to permanently disable the taint-tracking module
-  void setUserEnabled(bool status);
+  // void setUserEnabled(bool status);
 
   // Retrieve the current status of the taint propagation engine, as set by the
   // user
-  bool isUserEnabled();
+  //bool isUserEnabled();
 
   // Registers names
   void setRegisterName(target_ulong reg, const char *name);
@@ -93,6 +94,9 @@ class TaintEngine {
                   bool dsttmp, target_ulong dst);
   void combineR2M(bool regtmp, target_ulong reg, target_ulong addr, int size);
   void combineM2R(target_ulong addr, int size, bool regtmp, target_ulong reg);
+
+  //convenience function added to allow a c-compatible api
+  const std::set<int>* getMemoryLabels(target_ulong addr) const;
 
  private:
   // Caches used to efficiently check if a register is tainted

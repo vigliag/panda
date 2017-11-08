@@ -2,8 +2,8 @@
 #include "tcg-taint/callbacks.h"
 #include "assert.h"
 
-bool qtrace_taint_enabled = false;
-bool qtrace_instrument = false;
+bool qtrace_taint_instrumentation_enabled = false;
+bool qtrace_in_instrumentation = false;
 
 notify_taint_regalloc_t notify_taint_regalloc = 0;
 notify_taint_moveM2R_t notify_taint_moveM2R  = 0;
@@ -16,7 +16,7 @@ notify_taint_clearM_t notify_taint_clearM = 0;
 notify_taint_assert_t notify_taint_assert = 0;
 notify_taint_endtb_t notify_taint_endtb = 0;
 
-void tcg_taint_enable(void){
+static void tgc_taint_intstrumentation_check_callbacks(void){
     assert(notify_taint_regalloc);
     assert(notify_taint_moveM2R);
     assert(notify_taint_moveR2M);
@@ -26,6 +26,18 @@ void tcg_taint_enable(void){
     assert(notify_taint_clearR);
     assert(notify_taint_clearM);
     assert(notify_taint_assert);
+    assert(notify_taint_endtb);
+}
 
-    qtrace_taint_enabled = true;
+void tcg_taint_instrumentation_init(void){
+    tgc_taint_intstrumentation_check_callbacks();
+}
+
+
+void tcg_taint_instrumentation_enable(void){
+    qtrace_taint_instrumentation_enabled = true;
+}
+
+void tcg_taint_instrumentation_disable(void){
+    qtrace_taint_instrumentation_enabled = false;
 }

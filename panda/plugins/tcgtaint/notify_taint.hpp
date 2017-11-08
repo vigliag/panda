@@ -2,13 +2,9 @@
 // Copyright 2013, Roberto Paleari <roberto@greyhats.it>
 //
 
-#ifndef SRC_QTRACE_TAINT_NOTIFY_TAINT_H_
-#define SRC_QTRACE_TAINT_NOTIFY_TAINT_H_
+#pragma once
 
-#ifdef __cplusplus
-#include "qtrace/common.h"
-extern "C" {
-#endif
+namespace qtrace {
 
   /* Allocation of CPU registers */
   void notify_taint_regalloc(target_ulong reg, const char *name);
@@ -50,14 +46,10 @@ extern "C" {
   void notify_taint_assert(target_ulong reg, bool istrue);
 
   /* Notify a CPL switch */
-  void notify_taint_cpl(target_ulong cr3, target_ulong newcpl);
+  //void notify_taint_cpl(target_ulong cr3, target_ulong newcpl);
 
   /* Switch and query taint-tracker state */
-  void notify_taint_set_state(bool state);
-  bool notify_taint_get_state(void);
+  //void notify_taint_set_state(bool state);
+  //bool notify_taint_get_state(void);
 
-#ifdef __cplusplus
 }
-#endif
-
-#endif  // SRC_QTRACE_TAINT_NOTIFY_TAINT_H_

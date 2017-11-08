@@ -6,10 +6,11 @@
 */
 
 #include "panda/plugin.h" //include plugin api we are implementing
-#include "taint2/taint2.h" //include taint2 module we'll use
+//#include "taint2/taint2.h" //include taint2 module we'll use
 #include "callstack_instr/callstack_instr.h"
 #include "sysevent/sysevent.h"
 #include "syscall_listener.hpp"
+//#include "tcgtaint/api.hpp"
 #include <libgen.h>
 
 // These need to be extern "C" so that the ABI is compatible with
@@ -17,7 +18,8 @@
 
 extern "C" {
 
-#include "taint2/taint2_ext.h"
+//#include "taint2/taint2_ext.h"
+#include "tcgtaint/tcgtaint_ext.h"
 #include "callstack_instr/callstack_instr_ext.h"
 #include "panda/plog.h"
 
@@ -61,7 +63,7 @@ public:
     std::map<FQThreadId, std::vector<Tag>> curr_tags;
 
     std::shared_ptr<Event> getEvent(FQThreadId thread_id){
-        auto& events = curr_events[thread_id];
+        std::vector<shared_ptr<Event>>& events = curr_events[thread_id];
         if(events.size()){
             return curr_events[thread_id].back();
         } else {
@@ -106,6 +108,9 @@ public:
 // whether we want to run without LLVM and taint analysis
 static bool no_llvm = false;
 
+
+static bool no_callstack = false;
+
 // filename where to print the collected data
 static const char* outfile = nullptr;
 
@@ -141,11 +146,13 @@ static std::set<hwaddr> phisicalAddressesToTaint;
 
 
 static void enableTaint(){
-    taint2_enable_taint();
+    //taint2_enable_taint();
+    //it can stay enabled, with tcgtaint...
 }
 
 static int taintEnabled(){
-    return taint2_enabled();
+    //return taint2_enabled();
+    return true;
 }
 
 /** Reads the labels for a given memory range, executing the callback function for each */
@@ -160,11 +167,20 @@ static int readLabels(CPUState* cpu, Address addr, target_ulong size, std::funct
 
     for(uint32_t i=0; i< size; i++){
         uint64_t abs_addr_i = abs_addr+i;
-        uint32_t nlabels = taint2_query_ram(abs_addr_i);
+
+        uint32_t nlabels = tcgtaint_get_physical_memory_labels_count(abs_addr_i);
+        //uint32_t nlabels = taint2_query_ram(abs_addr_i);
+
+
         if(!nlabels) continue;
 
+        cout << "LABELS " << nlabels << endl;
+
+        //vector<uint32_t> labels(nlabels);
+        //taint2_query_set_ram(abs_addr_i, labels.data());
+
         vector<uint32_t> labels(nlabels);
-        taint2_query_set_ram(abs_addr_i, labels.data());
+        tcgtaint_physical_memory_labels_copy(abs_addr_i, labels.data());
 
         for(uint32_t label : labels){
             callback(addr + i, label);
@@ -179,9 +195,12 @@ const bool LABEL_ADDITIVE = true;
 static void writeLabelPA(uint64_t pa_addr, size_t size, Label label, bool additive = false){
     for(size_t i = 0; i < size; i++){
         if(additive){
-            taint2_label_ram_additive(pa_addr + i, label);
+            //taint2_label_ram_additive(pa_addr + i, label);
+            tcgtaint_taint_physical_memory(pa_addr+i, 1, label);
         } else {
-            taint2_label_ram(pa_addr +i, label);
+            //taint2_label_ram(pa_addr +i, label);
+            tcgtaint_clear_physical_memory(pa_addr+i, 1);
+            tcgtaint_taint_physical_memory(pa_addr+i, 1, label);
         }
     }
 }
@@ -197,11 +216,12 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
 
     cout << "EVENT exit " << event->toString() << endl;
 
-    std::vector<target_ulong> current_callstack(10);
-    uint32_t callstacksize = get_callers(current_callstack.data(), static_cast<int>(current_callstack.size()), cpu);
-    current_callstack.resize(callstacksize);
-
-    event->callstack = std::move(current_callstack);
+    if(!no_callstack){
+        std::vector<target_ulong> current_callstack(10);
+        uint32_t callstacksize = get_callers(current_callstack.data(), static_cast<int>(current_callstack.size()), cpu);
+        current_callstack.resize(callstacksize);
+        event->callstack = std::move(current_callstack);
+    }
 
     //logging
     logEvent(*event, outfp);
@@ -566,8 +586,8 @@ int systaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     std::shared_ptr<Event> current_event = events.getEvent(thread);
 
     //actual labeling
-    Label label = current_event->getLabel();
     if(current_event && taintEnabled() && (!only_taint_syscall_args || current_event->kind == EventKind::encoding)){
+        Label label = current_event->getLabel();
         for(const auto& addr: phisicalAddressesToTaint){
             writeLabelPA(addr, 1, label);
         }
@@ -649,15 +669,18 @@ bool init_plugin(void *self) {
     pcb.asid_changed = asid_changed_callback;
     panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
 
-    panda_require("taint2");
-    assert(init_taint2_api());
+    //panda_require("taint2");
+    //assert(init_taint2_api());
+
+    panda_require("tcgtaint");
+    assert(init_tcgtaint_api());
+    tcgtaint_set_taint_status(true);
 
     //PPP_REG_CB("taint2", on_taint_change, on_taint_change);
     //taintchanges = fopen("/tmp/taintchanges.log", "w");
     //assert(taintchanges);
 
-    panda_require("callstack_instr");
-    assert(init_callstack_instr_api());
+
 
     /* TODO use relative path
      * extern const char *qemu_file;
@@ -668,8 +691,6 @@ bool init_plugin(void *self) {
 
     parseSyscallDefs("windows7_x86_prototypes.txt");
 
-    PPP_REG_CB("callstack_instr", on_call2, on_function_call);
-    PPP_REG_CB("callstack_instr", on_ret2, on_function_return);
 
     panda_require("sysevent");
     PPP_REG_CB("sysevent", on_sysevent_enter, external_event_enter);
@@ -707,6 +728,16 @@ bool init_plugin(void *self) {
         no_llvm = panda_parse_bool_opt(args, "no_llvm", "disable llvm and tainting");
         cout << "no_llvm " << no_llvm << endl;
 
+        no_callstack = panda_parse_bool_opt(args, "no_callstack", "disable callstack instrumentation");
+        cout << "no_callstack " << no_callstack << endl;
+
+        if(!no_callstack){
+            panda_require("callstack_instr");
+            assert(init_callstack_instr_api());
+            PPP_REG_CB("callstack_instr", on_call2, on_function_call);
+            PPP_REG_CB("callstack_instr", on_ret2, on_function_return);
+        }
+
         extevents_as_primary = panda_parse_bool_opt(args, "extevents", "use syscalls as primary events");
 
         outfile = panda_parse_string_opt(args, "outfile", nullptr, "an output file");
@@ -736,7 +767,6 @@ bool init_plugin(void *self) {
     //TODO now probably useless
     panda_do_flush_tb();
     panda_enable_precise_pc();
-    panda_enable_tb_chaining();
 
 #endif
 
