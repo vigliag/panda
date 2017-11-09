@@ -28,8 +28,11 @@ void tcgtaint_clear_physical_memory(hwaddr phyaddr, unsigned int size) {
 
 void tcgtaint_set_taint_status(bool status){
     taint_is_user_enabled = status;
-    qtrace_taint_instrumentation_enabled = status;
-    panda_do_flush_tb();
+    if(status){
+        tcg_taint_instrumentation_enable();
+    } else {
+        tcg_taint_instrumentation_disable();
+    }
 }
 
 bool tcgtaint_is_taint_instrumentation_on(void){

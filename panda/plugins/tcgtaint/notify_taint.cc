@@ -29,6 +29,8 @@ namespace qtrace {
 
     void notify_taint_moveM2R(target_ulong addr, int size,
                               bool istmp, target_ulong reg) {
+      assert(size == 0 || size > 7);
+      size = size/8;
       hwaddr phyaddr = virt_to_phys(addr, size);
       if (physical_address_is_valid(phyaddr)) {
         WARNING("Invalid address (VA: %.8x, PHY: %.8x)", addr, phyaddr);
@@ -39,6 +41,8 @@ namespace qtrace {
 
     void notify_taint_moveR2M(bool istmp, target_ulong reg,
                               target_ulong addr, int size) {
+        assert(size == 0 || size > 7);
+        size = size/8;
       hwaddr phyaddr = virt_to_phys(addr, size);
       if (physical_address_is_valid(phyaddr)) {
         WARNING("Invalid address (VA: %.8x, PHY: %.8x)", addr, phyaddr);
@@ -57,6 +61,7 @@ namespace qtrace {
                                      bool dsttmp, target_ulong dst,
                                      unsigned int dstoff,
                                      int size) {
+      //size is already in bytes
       tcgtaint_ctx.taint_engine->moveR2R(srctmp, src, srcoff,
                                         dsttmp, dst, dstoff,
                                         size);
@@ -67,6 +72,8 @@ namespace qtrace {
     }
 
     void notify_taint_clearM(target_ulong addr, int size) {
+    assert(size == 0 || size > 7);
+    size = size/8;
       hwaddr phyaddr = virt_to_phys(addr, size);
       if (physical_address_is_valid(phyaddr)) {
         return;

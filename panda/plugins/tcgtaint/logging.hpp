@@ -13,7 +13,7 @@
 // 4 = DEBUG
 // 5 = TRACE
 
-#define LOG_LEVEL 3
+#define LOG_LEVEL 5
 
 // Uncomment to include the program counter (i.e., TB address) in the debug
 // logs
@@ -52,7 +52,7 @@
 #endif
 
 /* Forward declaration */
-class Syscall;
+//class Syscall;
 
 /* Initialize the logging subsystem */
 int log_init(const char *filename);

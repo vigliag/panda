@@ -40,6 +40,8 @@ int tcgtaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     // hooking it to after_block_callback should hopefully work as well,
     // as, if I read correctly, cpl is changed in the sysenter executed as
     // part of the userspace tb
+
+    // intentionally not flushing (not needed?)
     if (taint_is_user_enabled) {
         if (panda_in_kernel(cpu) && !taint_in_kernel_space) {
             qtrace_taint_instrumentation_enabled = false;
@@ -49,7 +51,7 @@ int tcgtaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     }
 
     // TODO probably only needed when user manually enables/disables
-    // panda_do_flush_tb();
+    //panda_do_flush_tb();
 
     return 0;
 }

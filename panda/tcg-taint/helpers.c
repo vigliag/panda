@@ -109,8 +109,8 @@ void helper_qtrace_deposit(target_ulong dst,
 
     if(! ((ofs % 8) == 0 && (len % 8) == 0 && (ofs+len) <= 32) ){
         //assert(false);
-        printf("ignoring deposit\n");
-        return;
+        fprintf(stderr, "warning deposit assertion failed\n");
+        //return;
     }
 
     bool dsttmp = register_is_temp(dst);

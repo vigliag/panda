@@ -9,7 +9,7 @@
 #include "taintengine.hpp"
 #include "shadow.hpp"
 
-#include "../qtrace/logging.h"
+#include "logging.hpp"
 
 #define REGCHR(x)    ((x) ? 't' : 'c')
 #define REGNAME(obj) \
@@ -205,7 +205,8 @@ void TaintEngine::moveM2R(target_ulong addr, int size,
     } else {
       TRACE("Taint moving M(%.8x) -> R%c(%.2x %s)", addr + i,
             REGCHR(regtmp), reg, REGNAME(regobj));
-      regobj->set(mem_.getTaintLocation(addr + i));
+      //VIGLIAG HERE THERE WAS A MISSING START
+      regobj->set(mem_.getTaintLocation(addr + i), i);
     }
   }
   _updateRegisterCache(regtmp, reg, regobj->isTainted());
@@ -224,6 +225,7 @@ void TaintEngine::combineM2R(target_ulong addr, int size,
 
 void TaintEngine::moveR2M(bool regtmp, target_ulong reg,
                           target_ulong addr, int size) {
+  assert(size < 15); //size is in bytes!
   ShadowRegister *regobj = getRegister(regtmp, reg);
   for (int i = 0; i < std::min(size, regobj->getSize()); i++) {
     if (!regobj->isTaintedByte(i)) {
@@ -235,6 +237,9 @@ void TaintEngine::moveR2M(bool regtmp, target_ulong reg,
       }
     } else {
       // Source is tainted: move
+       if(addr+i == 0x122ffc10){
+        printf("HI\n");
+       }
       TRACE("Taint moving R%c(%.2x %s) -> M(%.8x)",
               REGCHR(regtmp), reg, REGNAME(regobj), addr + i);
       mem_.set(regobj->getTaintLocation(i), addr+i);

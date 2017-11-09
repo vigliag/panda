@@ -118,7 +118,8 @@ static bool automatically_add_processes = false;
 
 static bool extevents_as_primary = false;
 static bool only_taint_syscall_args = false;
-static bool use_candidate_pointers = true;
+static bool use_candidate_pointers = false;
+static bool no_syscalls = false;
 
 static uint64_t target_end_count = 0;
 static uint64_t target_taint_at = 0;
@@ -174,7 +175,7 @@ static int readLabels(CPUState* cpu, Address addr, target_ulong size, std::funct
 
         if(!nlabels) continue;
 
-        cout << "LABELS " << nlabels << endl;
+        cout << "LABELS " << nlabels << " at " << addr + i << endl;
 
         //vector<uint32_t> labels(nlabels);
         //taint2_query_set_ram(abs_addr_i, labels.data());
@@ -236,6 +237,11 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
        call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
        call.syscall_no == 131){ // Skip NtFreeVirtualMemory (for simmetry)
+        return;
+    }
+
+    //TODO REMOVEME
+    if(no_syscalls){
         return;
     }
 
@@ -403,7 +409,13 @@ void external_event_exit(CPUState *cpu, uint32_t event_label){
     if(current_event && current_event->kind == EventKind::external && event_label == current_event->label){
         finalize_current_event(cpu, thread);
     } else {
-        cout << "external event ignored_exit " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
+        cout << "external event ignored_exit " << event_label << " instcount " <<  rr_get_guest_instr_count();
+        if(current_event){
+            cout << " current event label " << current_event->label;
+        } else {
+            cout << " no current event";
+        }
+        cout << endl;
     }
 }
 
@@ -515,6 +527,8 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             p_current_event->memory.write(addr+i, data[i]);
 
             if(do_taint && !translation_error){
+                if(p_current_event->kind == EventKind::external)
+                    cout << "LABELLING " << addr +i << endl;
                 phisicalAddressesToTaint.insert(physical_address + i);
             }
         }
@@ -564,8 +578,8 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         p_current_event->memory.read(addr +i ,  data[i]);
     }
 
-    readLabels(cpu, addr, size, [&p_current_event](uint32_t addr, uint32_t dep){
-        p_current_event->memory.readdep(addr, dep);
+    readLabels(cpu, addr, size, [&p_current_event](uint32_t addri, uint32_t dep){
+        p_current_event->memory.readdep(addri, dep);
     });
 
 
@@ -739,6 +753,11 @@ bool init_plugin(void *self) {
         }
 
         extevents_as_primary = panda_parse_bool_opt(args, "extevents", "use syscalls as primary events");
+
+        no_syscalls = panda_parse_bool_opt(args, "no_syscalls", "don't track syscalls");
+        if(no_syscalls){
+            extevents_as_primary = true;
+        }
 
         outfile = panda_parse_string_opt(args, "outfile", nullptr, "an output file");
 

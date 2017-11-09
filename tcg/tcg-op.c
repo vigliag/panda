@@ -2665,8 +2665,25 @@ static void gen_ldst_i64(TCGOpcode opc, TCGv_i64 val, TCGv addr,
 #endif
 }
 
+#ifdef CONFIG_QTRACE_TAINT
+static inline int memop_bits(TCGMemOp memop){
+    switch (memop & MO_SIZE) {
+    case 0: return 8;
+    case 1: return 16;
+    case 2: return 32;
+    case 3: return 64;
+    }
+    assert(false); //mask is only 2 bit
+}
+#endif
+
 void tcg_gen_qemu_ld_i32(TCGv_i32 val, TCGv addr, TCGArg idx, TCGMemOp memop)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    if(qtrace_taint_instrumentation_enabled){
+        tcg_gen_qtrace_qemu_ld(val, addr, memop_bits(memop));
+    }
+#endif
     memop = tcg_canonicalize_memop(memop, 0, 0);
     trace_guest_mem_before_tcg(tcg_ctx.cpu, tcg_ctx.tcg_env,
                                addr, trace_mem_get_info(memop, 0));
@@ -2675,6 +2692,11 @@ void tcg_gen_qemu_ld_i32(TCGv_i32 val, TCGv addr, TCGArg idx, TCGMemOp memop)
 
 void tcg_gen_qemu_st_i32(TCGv_i32 val, TCGv addr, TCGArg idx, TCGMemOp memop)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    if(qtrace_taint_instrumentation_enabled){
+        tcg_gen_qtrace_qemu_st(val, addr, memop_bits(memop));
+    }
+#endif
     memop = tcg_canonicalize_memop(memop, 0, 1);
     trace_guest_mem_before_tcg(tcg_ctx.cpu, tcg_ctx.tcg_env,
                                addr, trace_mem_get_info(memop, 1));
@@ -2693,6 +2715,13 @@ void tcg_gen_qemu_ld_i64(TCGv_i64 val, TCGv addr, TCGArg idx, TCGMemOp memop)
         return;
     }
 
+#ifdef CONFIG_QTRACE_TAINT
+    //only if target_reg_bits == 64 (otherwise the 32bit version is called)
+    if(qtrace_taint_instrumentation_enabled){
+        tcg_gen_qtrace_qemu_ld_i64(val, addr, memop_bits(memop));
+    }
+#endif
+
     memop = tcg_canonicalize_memop(memop, 1, 0);
     trace_guest_mem_before_tcg(tcg_ctx.cpu, tcg_ctx.tcg_env,
                                addr, trace_mem_get_info(memop, 0));
@@ -2705,6 +2734,13 @@ void tcg_gen_qemu_st_i64(TCGv_i64 val, TCGv addr, TCGArg idx, TCGMemOp memop)
         tcg_gen_qemu_st_i32(TCGV_LOW(val), addr, idx, memop);
         return;
     }
+
+#ifdef CONFIG_QTRACE_TAINT
+    //only if target_reg_bits == 64 (otherwise the 32bit version is called)
+    if(qtrace_taint_instrumentation_enabled){
+        tcg_gen_qtrace_qemu_st_i64(val, addr, memop_bits(memop));
+    }
+#endif
 
     memop = tcg_canonicalize_memop(memop, 1, 1);
     trace_guest_mem_before_tcg(tcg_ctx.cpu, tcg_ctx.tcg_env,

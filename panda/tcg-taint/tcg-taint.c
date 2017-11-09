@@ -1,3 +1,4 @@
+#include "panda/plugin.h"
 #include "tcg-taint/tcg-taint.h"
 #include "tcg-taint/callbacks.h"
 #include "assert.h"
@@ -36,8 +37,10 @@ void tcg_taint_instrumentation_init(void){
 
 void tcg_taint_instrumentation_enable(void){
     qtrace_taint_instrumentation_enabled = true;
+    panda_do_flush_tb();
 }
 
 void tcg_taint_instrumentation_disable(void){
     qtrace_taint_instrumentation_enabled = false;
+    panda_do_flush_tb();
 }

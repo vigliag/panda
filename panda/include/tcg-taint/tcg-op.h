@@ -157,8 +157,10 @@ static inline void tcg_gen_qtrace_combine3(TCGOpcode opc, TCGv_i32 ret,
     if(!TCGV_EQUAL_I32(arg1, arg2)){
         //TODO(vigliag) why this check? why is it different from the check above?
         //why it fails?
-        printf("WARNING assertion failing qtrace_combine3. Skipping \n");
-        return;
+        fprintf(stderr, "WARNING assertion failing qtrace_combine3.\n");
+
+        //QTRACE_INSTRUMENT_END();
+        //return;
     }
 
     TCGv_i32 retidx = tcg_const_i32(GET_TCGV_I32(ret));

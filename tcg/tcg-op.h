@@ -863,89 +863,89 @@ void tcg_gen_qemu_st_i64(TCGv_i64, TCGv, TCGArg, TCGMemOp);
 
 static inline void tcg_gen_qemu_ld8u(TCGv ret, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_ld(ret, addr, 8);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_ld(ret, addr, 8);
+//#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_UB);
 }
 
 static inline void tcg_gen_qemu_ld8s(TCGv ret, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_ld(ret, addr, 8);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_ld(ret, addr, 8);
+//#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_SB);
 }
 
 static inline void tcg_gen_qemu_ld16u(TCGv ret, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_ld(ret, addr, 16);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_ld(ret, addr, 16);
+//#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_TEUW);
 }
 
 static inline void tcg_gen_qemu_ld16s(TCGv ret, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_ld(ret, addr, 16);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_ld(ret, addr, 16);
+//#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_TESW);
 }
 
 static inline void tcg_gen_qemu_ld32u(TCGv ret, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_ld(ret, addr, 32);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_ld(ret, addr, 32);
+//#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_TEUL);
 }
 
 static inline void tcg_gen_qemu_ld32s(TCGv ret, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_ld(ret, addr, 32);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_ld(ret, addr, 32);
+//#endif
     tcg_gen_qemu_ld_tl(ret, addr, mem_index, MO_TESL);
 }
 
 static inline void tcg_gen_qemu_ld64(TCGv_i64 ret, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_ld_i64(ret, addr, 64);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_ld_i64(ret, addr, 64);
+//#endif
     tcg_gen_qemu_ld_i64(ret, addr, mem_index, MO_TEQ);
 }
 
 static inline void tcg_gen_qemu_st8(TCGv arg, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_st(arg, addr, 8);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_st(arg, addr, 8);
+//#endif
     tcg_gen_qemu_st_tl(arg, addr, mem_index, MO_UB);
 }
 
 static inline void tcg_gen_qemu_st16(TCGv arg, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_st(arg, addr, 16);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_st(arg, addr, 16);
+//#endif
     tcg_gen_qemu_st_tl(arg, addr, mem_index, MO_TEUW);
 }
 
 static inline void tcg_gen_qemu_st32(TCGv arg, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_st(arg, addr, 32);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_st(arg, addr, 32);
+//#endif
     tcg_gen_qemu_st_tl(arg, addr, mem_index, MO_TEUL);
 }
 
 static inline void tcg_gen_qemu_st64(TCGv_i64 arg, TCGv addr, int mem_index)
 {
-#ifdef CONFIG_QTRACE_TAINT
-    tcg_gen_qtrace_qemu_st_i64(arg, addr, 64);
-#endif
+//#ifdef CONFIG_QTRACE_TAINT
+//    tcg_gen_qtrace_qemu_st_i64(arg, addr, 64);
+//#endif
     tcg_gen_qemu_st_i64(arg, addr, mem_index, MO_TEQ);
 }
 
