@@ -154,14 +154,13 @@ static inline void tcg_gen_qtrace_combine3(TCGOpcode opc, TCGv_i32 ret,
                                           TCGv_i32 arg1, TCGv_i32 arg2) {
     (void) opc;
     QTRACE_INSTRUMENT_START();
-    if(!TCGV_EQUAL_I32(arg1, arg2)){
-        //TODO(vigliag) why this check? why is it different from the check above?
-        //why it fails?
-        fprintf(stderr, "WARNING assertion failing qtrace_combine3.\n");
 
-        //QTRACE_INSTRUMENT_END();
-        //return;
-    }
+    // WARNING(vigliag) CHECK(vigliag)
+    // assertion failing TCGV_EQUAL_I32(arg1, arg2)
+    // I don't understand why this check, and why it is different
+    // from the check above. (which compared arg with ret)
+
+    // assert(TCGV_EQUAL_I32(arg1, arg2))
 
     TCGv_i32 retidx = tcg_const_i32(GET_TCGV_I32(ret));
     TCGv_i32 arg1idx = tcg_const_i32(GET_TCGV_I32(arg1));
