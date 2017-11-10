@@ -863,6 +863,10 @@ void tcg_gen_sextract_i32(TCGv_i32 ret, TCGv_i32 arg,
 void tcg_gen_movcond_i32(TCGCond cond, TCGv_i32 ret, TCGv_i32 c1,
                          TCGv_i32 c2, TCGv_i32 v1, TCGv_i32 v2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    //NOTE(vigliag) TCG_TARGET_HAS_movcond_i32 is set to zero in tgc-target.h if CONFIG_QTRACE_TAINT
+    //TODO the right way is probably handling this in an helper
+#endif
     if (cond == TCG_COND_ALWAYS) {
         tcg_gen_mov_i32(ret, v1);
     } else if (cond == TCG_COND_NEVER) {

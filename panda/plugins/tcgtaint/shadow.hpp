@@ -120,7 +120,9 @@ private:
 class ShadowRegister {
 public:
   // Initialize a tainted register, given its size (in bytes)
-  explicit ShadowRegister(unsigned int size = sizeof(target_ulong))
+  // CHECK(vigliag) it was previously initialized to target_ulong,
+  // but the tcg target architecture (and tcg temp registers) are 64bit
+  explicit ShadowRegister(unsigned int size = sizeof(uint64_t))
     : size_(size) {
     reg_  = new TaintLocation[size];
   }

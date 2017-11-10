@@ -538,11 +538,13 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
 #endif
 
 #ifdef CONFIG_QTRACE_TAINT
-    /* No support for 64-bit registers, but this should be not a problem as
-       TCG simply splits them in two 32-bit parts */
-    //TODO(vigliag) ugh.. this assertion is failing... commenting it out for the moment being
-    //failing reg: bnd0_lb
-    //assert(type != TCG_TYPE_I64);
+    /* Qtrace has no support for 64-bit registers, but this should be not a problem as
+       TCG simply splits them in two 32-bit parts [vigliag: the global ones, at least,
+       64 bit temps seems to be used]
+
+       NOTE(vigliag) previous qtrace assertion `assert(type != TCG_TYPE_I64);` was removed
+       it was failing because of the new intel MPX registers such as bnd0_lb.
+    */
     if(qtrace_taint_instrumentation_enabled)
         notify_taint_regalloc(s->nb_globals, name);
 #endif

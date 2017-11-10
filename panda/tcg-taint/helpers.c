@@ -103,15 +103,14 @@ void helper_qtrace_deposit(target_ulong dst,
                                      target_ulong op1, target_ulong op2,
                                      unsigned int ofs, unsigned int len) {
   /* We currently support only byte-level deposit instructions, also because
-     taint-tracking is performed at the byte-level */
+     taint-tracking is performed at the byte-level
 
-  //TODO(vigliag) WARNING assertion fails: dst=4, op1=4, op2=35, ofs=0, len=1
-
-    if(! ((ofs % 8) == 0 && (len % 8) == 0 && (ofs+len) <= 32) ){
-        //assert(false);
-        fprintf(stderr, "warning deposit assertion failed\n");
-        //return;
-    }
+     WARNING(vigliag) there was an assertion here:
+     ((ofs % 8) == 0 && (len % 8) == 0 && (ofs+len) <= 32)
+     which is now failing with values such as dst=4, op1=4, op2=35, ofs=0, len=1
+     I'm also changing this function to pass offset and len in bits when notifying
+     for consistency with the other function
+   */
 
     bool dsttmp = register_is_temp(dst);
     bool op2tmp = register_is_temp(op2);
@@ -123,8 +122,8 @@ void helper_qtrace_deposit(target_ulong dst,
     }
 
     notify_taint_moveR2R_offset(op2tmp, REG_IDX(op2tmp, op2), 0,
-                              dsttmp, REG_IDX(dsttmp, dst), ofs/8,
-                              len/8);
+                              dsttmp, REG_IDX(dsttmp, dst), ofs,
+                              len);
 }
 
 void helper_qtrace_assert(target_ulong reg, target_ulong istrue) {

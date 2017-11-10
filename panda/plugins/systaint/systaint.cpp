@@ -527,8 +527,11 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             p_current_event->memory.write(addr+i, data[i]);
 
             if(do_taint && !translation_error){
-                if(p_current_event->kind == EventKind::external)
-                    cout << "LABELLING " << addr +i << endl;
+                //logging
+                uint8_t printable = isprint(data[i]) ? data[i] : '_';
+                cerr << "LABELLING " << addr +i <<" (" << std::hex << physical_address + i << std::dec << ") " << char(printable) << endl;
+
+                //defer tainting to end of the block
                 phisicalAddressesToTaint.insert(physical_address + i);
             }
         }

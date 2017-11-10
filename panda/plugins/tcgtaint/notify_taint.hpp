@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include "panda/plugin.h"
 
 namespace qtrace {
 
