@@ -10,6 +10,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include "logging.hpp"
 
 using target_ulong = uint32_t;
 
@@ -33,6 +34,9 @@ public:
   // Combine two tainted locations
   void combine(const TaintLocation &src) {
     labels_.insert(src.labels_.begin(), src.labels_.end());
+    if(labels_.size() > 100){
+        WARNING("More than 100 labels combined");
+    }
   }
 
   // Copy taint labels to an output set

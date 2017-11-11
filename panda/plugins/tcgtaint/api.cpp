@@ -29,8 +29,10 @@ void tcgtaint_clear_physical_memory(hwaddr phyaddr, unsigned int size) {
 void tcgtaint_set_taint_status(bool status){
     taint_is_user_enabled = status;
     if(status){
+        puts("enabling taint");
         tcg_taint_instrumentation_enable();
     } else {
+        puts("disabling taint");
         tcg_taint_instrumentation_disable();
     }
 }
@@ -39,7 +41,7 @@ bool tcgtaint_is_taint_instrumentation_on(void){
     return qtrace_taint_instrumentation_enabled;
 }
 
-bool tcgtaint_is_taint_enabled(bool status){
+bool tcgtaint_is_taint_enabled(){
     return taint_is_user_enabled;
 }
 

@@ -10,7 +10,6 @@
 #include "callstack_instr/callstack_instr.h"
 #include "sysevent/sysevent.h"
 #include "syscall_listener.hpp"
-//#include "tcgtaint/api.hpp"
 #include <libgen.h>
 
 // These need to be extern "C" so that the ABI is compatible with
@@ -106,7 +105,7 @@ public:
 //////////////////
 
 // whether we want to run without LLVM and taint analysis
-static bool no_llvm = false;
+static bool dont_enable_taint = false;
 
 
 static bool no_callstack = false;
@@ -121,7 +120,8 @@ static bool only_taint_syscall_args = false;
 static bool use_candidate_pointers = false;
 static bool no_syscalls = false;
 static const bool defer_tainting_writes_to_end_of_the_block = false;
-static bool debug_logs = true;
+static bool debug_logs = false;
+static bool disable_taint_on_other_processes = false;
 
 static uint64_t target_end_count = 0;
 static uint64_t target_taint_at = 0;
@@ -150,12 +150,12 @@ static std::set<hwaddr> phisicalAddressesToTaint;
 
 static void enableTaint(){
     //taint2_enable_taint();
-    //it can stay enabled, with tcgtaint...
+    tcgtaint_set_taint_status(true);
 }
 
 static int taintEnabled(){
     //return taint2_enabled();
-    return true;
+    return tcgtaint_is_taint_enabled();
 }
 
 /** Reads the labels for a given memory range, executing the callback function for each */
@@ -185,7 +185,7 @@ static int readLabels(CPUState* cpu, Address addr, target_ulong size, std::funct
         tcgtaint_physical_memory_labels_copy(abs_addr_i, labels.data());
 
         if(debug_logs){
-            fprintf(stderr, "READLABEL %d / %d at %d (%p) \n", labels[0], nlabels, addr +i, (void*)abs_addr_i);
+            fprintf(stderr, "READLABEL %u / %d at %d (%p) \n", labels[0], nlabels, addr +i, (void*)abs_addr_i);
         }
 
         for(uint32_t label : labels){
@@ -217,7 +217,7 @@ static void writeLabelPA(uint64_t pa_addr, size_t size, Label label, bool additi
 #ifdef TARGET_I386
 
 static void finalize_current_event(CPUState* cpu, FQThreadId thread){
-    auto event = events.getEvent(thread);
+    std::shared_ptr<Event> event = events.getEvent(thread);
     assert(event);
 
     // finalizing
@@ -235,6 +235,11 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
     //logging
     logEvent(*event, outfp);
     events.closeEvent(thread, *event);
+
+    event = events.getEvent(thread);
+    if(event){
+        cout << "current event on thread " << thread.second << " is now: " << event->getLabel() << endl;
+    }
 }
 
 /**
@@ -245,11 +250,11 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
        call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
        call.syscall_no == 131 || // Skip NtFreeVirtualMemory (for simmetry)
-       call.syscall_no == 267){  // Skip NtQueryVirtualMemory
+       call.syscall_no == 267 || // Skip NtQueryVirtualMemory
+       call.syscall_no == 44 ){ // Skip NtCallbackReturn, which doesn't return
         return;
     }
 
-    //TODO REMOVEME
     if(no_syscalls){
         return;
     }
@@ -315,7 +320,8 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
     if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
        call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
        call.syscall_no == 131 || // Skip NtFreeVirtualMemory (for simmetry)
-       call.syscall_no == 267){  // Skip NtQueryVirtualMemory
+       call.syscall_no == 267 || // Skip NtQueryVirtualMemory
+       call.syscall_no == 44 ){ // Skip NtCallbackReturn, which doesn't return
         return;
     }
 
@@ -389,7 +395,7 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
     }
 
 
-    if (!taintEnabled() && !no_llvm && !target_taint_at) {
+    if (!taintEnabled() && !dont_enable_taint && !target_taint_at) {
         printf("enabling taint\n");
         enableTaint();
     }
@@ -510,6 +516,9 @@ static bool addressIsNearCandidatePointer(const std::shared_ptr<Event>& p_curr_e
 int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     (void) pc;
+    if(debug_logs){
+        cerr << "WRITE at " << addr << " size=" << size << endl;
+    }
 
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
 
@@ -620,7 +629,7 @@ int systaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     auto instr_count = rr_get_guest_instr_count();
     if(target_end_count && instr_count > target_end_count){
         rr_end_replay_requested = 1;
-    } else if(target_taint_at && instr_count > target_taint_at && !no_llvm && !taintEnabled()){
+    } else if(target_taint_at && instr_count > target_taint_at && !dont_enable_taint && !taintEnabled()){
         enableTaint();
     }
 
@@ -675,9 +684,11 @@ int asid_changed_callback(CPUState* cpu, uint32_t oldasid, uint32_t newasid){
     (void) oldasid;
 
     if(monitored_processes.count(newasid)){
-        if (!taintEnabled() && !no_llvm) {
+        if (!taintEnabled() && !dont_enable_taint) {
             printf("enabling taint\n");
             enableTaint();
+        } else if(disable_taint_on_other_processes){
+            tcgtaint_set_taint_status(false);
         }
     }
 
@@ -719,7 +730,6 @@ bool init_plugin(void *self) {
 
     panda_require("tcgtaint");
     assert(init_tcgtaint_api());
-    tcgtaint_set_taint_status(true);
 
     //PPP_REG_CB("taint2", on_taint_change, on_taint_change);
     //taintchanges = fopen("/tmp/taintchanges.log", "w");
@@ -770,8 +780,11 @@ bool init_plugin(void *self) {
         if(tracked_encoding_fn)
             monitored_encoding_calls = parse_addr_list(tracked_encoding_fn);
 
-        no_llvm = panda_parse_bool_opt(args, "no_llvm", "disable llvm and tainting");
-        cout << "no_llvm " << no_llvm << endl;
+        dont_enable_taint = panda_parse_bool_opt(args, "no_taint", "disables automatically turning on tainting");
+        cout << "no_taint " << dont_enable_taint << endl;
+
+        disable_taint_on_other_processes = panda_parse_bool_opt(args, "no_taint_other", "toggles tainting on task switch");
+        cout << "no_taint_other " << disable_taint_on_other_processes << endl;
 
         no_callstack = panda_parse_bool_opt(args, "no_callstack", "disable callstack instrumentation");
         cout << "no_callstack " << no_callstack << endl;

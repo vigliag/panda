@@ -59,6 +59,9 @@ void ShadowMemory::set(const TaintLocation *loc, target_ulong addr) {
   }
 
   mem_[addr]->set(*loc);
+  if(mem_.size() % 1000 == 0){
+      INFO("%d memory locations tainted", mem_.size());
+  }
 }
 
 void ShadowMemory::clear(target_ulong addr, unsigned int size) {

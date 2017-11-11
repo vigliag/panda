@@ -17,7 +17,7 @@ bool tcgtaint_is_virtual_memory_tainted(target_ulong addr);
 
 void tcgtaint_set_taint_status(bool status);
 bool tcgtaint_is_taint_instrumentation_on(void);
-bool tcgtaint_is_taint_enabled(bool status);
+bool tcgtaint_is_taint_enabled(void);
 
 #ifdef __cplusplus
 };

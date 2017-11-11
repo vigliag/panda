@@ -330,8 +330,9 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 // After a block executes, we check if its last instruction was a CALL
 // if it is, then we add a new frame to our shadow stack
 int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
+    assert(tb);
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    instr_type tb_type = call_cache[tb->pc];
+    instr_type tb_type = call_cache.at(tb->pc);
 
     if (tb_type == INSTR_CALL) {
 

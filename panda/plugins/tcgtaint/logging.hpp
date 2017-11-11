@@ -13,7 +13,7 @@
 // 4 = DEBUG
 // 5 = TRACE
 
-#define LOG_LEVEL 5
+#define LOG_LEVEL 3
 
 // Uncomment to include the program counter (i.e., TB address) in the debug
 // logs

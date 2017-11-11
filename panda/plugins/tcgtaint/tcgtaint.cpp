@@ -22,10 +22,10 @@ PANDAENDCOMMENT */
 
 TCGTaintContext tcgtaint_ctx;
 bool taint_is_user_enabled = false;
-bool taint_in_kernel_space = true;
+bool taint_in_kernel_space = false;
 
-// QEMU/PANDA, which is written in C
 // These need to be extern "C" so that the ABI is compatible with
+// QEMU/PANDA, which is written in C
 extern "C" {
 bool init_plugin(void *);
 void uninit_plugin(void *);
@@ -79,7 +79,7 @@ bool init_plugin(void *self) {
     panda_disable_tb_chaining();
     panda_enable_precise_pc();
 
-    tcg_taint_instrumentation_enable();
+    //tcg_taint_instrumentation_enable();
 
     panda_cb pcb;
     pcb.after_block_exec = tcgtaint_after_block_callback;
