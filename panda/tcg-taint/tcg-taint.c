@@ -5,6 +5,7 @@
 
 bool qtrace_taint_instrumentation_enabled = false;
 bool qtrace_in_instrumentation = false;
+bool qtrace_tcg_is_generating_sse = false;
 
 notify_taint_regalloc_t notify_taint_regalloc = 0;
 notify_taint_moveM2R_t notify_taint_moveM2R  = 0;
@@ -16,6 +17,8 @@ notify_taint_clearR_t notify_taint_clearR = 0;
 notify_taint_clearM_t notify_taint_clearM = 0;
 notify_taint_assert_t notify_taint_assert = 0;
 notify_taint_endtb_t notify_taint_endtb = 0;
+notify_taint_micro_ld_t notify_taint_micro_ld = 0;
+notify_taint_micro_st_t notify_taint_micro_st = 0;
 
 static void tgc_taint_intstrumentation_check_callbacks(void){
     assert(notify_taint_regalloc);
@@ -28,6 +31,8 @@ static void tgc_taint_intstrumentation_check_callbacks(void){
     assert(notify_taint_clearM);
     assert(notify_taint_assert);
     assert(notify_taint_endtb);
+    assert(notify_taint_micro_ld);
+    assert(notify_taint_micro_st);
 }
 
 void tcg_taint_instrumentation_init(void){

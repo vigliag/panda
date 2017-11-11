@@ -17,9 +17,9 @@
 
 // Uncomment to include the program counter (i.e., TB address) in the debug
 // logs
-// #define LOG_PC
+#define LOG_PC
 
-#define LOG(level, ...) qtrace_log_(__FILE__, __LINE__, level, __VA_ARGS__)
+#define LOG(level, ...) qtrace_log_(__LINE__, level, __VA_ARGS__)
 
 #if LOG_LEVEL >= 5
 #define TRACE(...) LOG("TRA", __VA_ARGS__)
@@ -59,7 +59,7 @@ int log_init(const char *filename);
 
 /* Internal logging function. Log macros eventually use this function to write
    log messages. Should not be directly invoked by external modules */
-void qtrace_log_(const char *f, unsigned int l, const char *tag,
+void qtrace_log_(unsigned int l, const char *tag,
                  const char *fmt, ...);
 
 #endif  // SRC_QTRACE_LOGGING_H_

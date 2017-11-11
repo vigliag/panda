@@ -72,6 +72,8 @@ bool init_plugin(void *self) {
     notify_taint_clearM = qtrace::notify_taint_clearM;
     notify_taint_assert = qtrace::notify_taint_assert;
     notify_taint_endtb = qtrace::notify_taint_endtb;
+    notify_taint_micro_ld = qtrace::notify_taint_micro_ld;
+    notify_taint_micro_st = qtrace::notify_taint_micro_st;
 
     tcg_taint_instrumentation_init();
     panda_disable_tb_chaining();

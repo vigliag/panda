@@ -90,7 +90,7 @@ public:
         //TODO those events should be logged, not discarded
         events.erase(std::find_if(events.begin(), events.end(),
                                     [&event](const shared_ptr<Event>& cev){
-                                           return cev->label == event.label;
+                                           return cev->getLabel() == event.getLabel();
                                     }),
                                     events.end());
 
@@ -120,6 +120,8 @@ static bool extevents_as_primary = false;
 static bool only_taint_syscall_args = false;
 static bool use_candidate_pointers = false;
 static bool no_syscalls = false;
+static const bool defer_tainting_writes_to_end_of_the_block = false;
+static bool debug_logs = true;
 
 static uint64_t target_end_count = 0;
 static uint64_t target_taint_at = 0;
@@ -175,13 +177,16 @@ static int readLabels(CPUState* cpu, Address addr, target_ulong size, std::funct
 
         if(!nlabels) continue;
 
-        cout << "LABELS " << nlabels << " at " << addr + i << endl;
 
         //vector<uint32_t> labels(nlabels);
         //taint2_query_set_ram(abs_addr_i, labels.data());
 
         vector<uint32_t> labels(nlabels);
         tcgtaint_physical_memory_labels_copy(abs_addr_i, labels.data());
+
+        if(debug_logs){
+            fprintf(stderr, "READLABEL %d / %d at %d (%p) \n", labels[0], nlabels, addr +i, (void*)abs_addr_i);
+        }
 
         for(uint32_t label : labels){
             callback(addr + i, label);
@@ -194,6 +199,9 @@ static int readLabels(CPUState* cpu, Address addr, target_ulong size, std::funct
 const bool LABEL_ADDITIVE = true;
 
 static void writeLabelPA(uint64_t pa_addr, size_t size, Label label, bool additive = false){
+    if(!taintEnabled())
+        return;
+
     for(size_t i = 0; i < size; i++){
         if(additive){
             //taint2_label_ram_additive(pa_addr + i, label);
@@ -236,7 +244,8 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
 
     if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
        call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
-       call.syscall_no == 131){ // Skip NtFreeVirtualMemory (for simmetry)
+       call.syscall_no == 131 || // Skip NtFreeVirtualMemory (for simmetry)
+       call.syscall_no == 267){  // Skip NtQueryVirtualMemory
         return;
     }
 
@@ -305,7 +314,8 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
 
     if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
        call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
-       call.syscall_no == 131){ // Skip NtFreeVirtualMemory (for simmetry)
+       call.syscall_no == 131 || // Skip NtFreeVirtualMemory (for simmetry)
+       call.syscall_no == 267){  // Skip NtQueryVirtualMemory
         return;
     }
 
@@ -406,12 +416,12 @@ void external_event_exit(CPUState *cpu, uint32_t event_label){
     // Remove all tags started after the one terminating (vector is sorted)
     current_tags.erase(std::find(current_tags.begin(), current_tags.end(), event_label), current_tags.end());
 
-    if(current_event && current_event->kind == EventKind::external && event_label == current_event->label){
+    if(current_event && current_event->kind == EventKind::external && event_label == current_event->getLabel()){
         finalize_current_event(cpu, thread);
     } else {
         cout << "external event ignored_exit " << event_label << " instcount " <<  rr_get_guest_instr_count();
         if(current_event){
-            cout << " current event label " << current_event->label;
+            cout << " current event label " << current_event->getLabel();
         } else {
             cout << " no current event";
         }
@@ -514,25 +524,38 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         hwaddr physical_address = panda_virt_to_phys(cpu, addr);
         bool translation_error = physical_address == static_cast<hwaddr>(-1);
 
+        bool should_taint = true;
+
         if(translation_error){
             cerr << "Error when translating address " << addr << "to phyisical (won't taint)" << endl;
+            should_taint = false;
         }
 
-        bool do_taint = true;
-        if(use_candidate_pointers){
-            do_taint = addressIsNearCandidatePointer(p_current_event, addr);
+        if(p_current_event->kind != EventKind::encoding){
+            if(only_taint_syscall_args){
+                should_taint = false;
+            } else if(use_candidate_pointers){
+                should_taint = addressIsNearCandidatePointer(p_current_event, addr);
+            }
         }
 
         for(target_ulong i=0; i<size; i++){
             p_current_event->memory.write(addr+i, data[i]);
 
-            if(do_taint && !translation_error){
-                //logging
-                uint8_t printable = isprint(data[i]) ? data[i] : '_';
-                cerr << "LABELLING " << addr +i <<" (" << std::hex << physical_address + i << std::dec << ") " << char(printable) << endl;
+            if(should_taint){
 
-                //defer tainting to end of the block
-                phisicalAddressesToTaint.insert(physical_address + i);
+                if(debug_logs){
+                    uint8_t printable = isprint(data[i]) ? data[i] : '_';
+                    cerr << "LABELLING " << addr +i <<" (" << std::hex << physical_address + i << std::dec << ") " << char(printable) << endl;
+                }
+
+                if(defer_tainting_writes_to_end_of_the_block){
+                    // defer tainting to end of the block. Useful for LLVM taint,
+                    // which has instrumentation _after_ the store, and would immediately clear the taint
+                    phisicalAddressesToTaint.insert(physical_address + i);
+                } else {
+                    writeLabelPA(physical_address+i, 1, p_current_event->getLabel(), false);
+                }
             }
         }
     }
@@ -576,6 +599,9 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         }
     }
 
+    if(debug_logs){
+        fprintf(stderr, "READ %d (%p) of %d bytes \n", addr, (void*)panda_virt_to_phys(cpu, addr), size);
+    }
 
     for(target_ulong i=0; i< size; i++){
         p_current_event->memory.read(addr +i ,  data[i]);
@@ -584,7 +610,6 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     readLabels(cpu, addr, size, [&p_current_event](uint32_t addri, uint32_t dep){
         p_current_event->memory.readdep(addri, dep);
     });
-
 
     return 0;
 }
@@ -599,18 +624,21 @@ int systaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
         enableTaint();
     }
 
-    FQThreadId thread = getFQThreadId(cpu);
-    std::shared_ptr<Event> current_event = events.getEvent(thread);
+    //deferred labeling
+    if(defer_tainting_writes_to_end_of_the_block){
+        FQThreadId thread = getFQThreadId(cpu);
+        std::shared_ptr<Event> current_event = events.getEvent(thread);
 
-    //actual labeling
-    if(current_event && taintEnabled() && (!only_taint_syscall_args || current_event->kind == EventKind::encoding)){
-        Label label = current_event->getLabel();
-        for(const auto& addr: phisicalAddressesToTaint){
-            writeLabelPA(addr, 1, label);
+        if(current_event && taintEnabled()){
+            Label label = current_event->getLabel();
+            for(const auto& addr: phisicalAddressesToTaint){
+                writeLabelPA(addr, 1, label);
+            }
         }
+
+        phisicalAddressesToTaint.clear();
     }
 
-    phisicalAddressesToTaint.clear();
     return 0;
 }
 

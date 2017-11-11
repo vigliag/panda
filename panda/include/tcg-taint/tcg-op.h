@@ -77,6 +77,24 @@ static inline void tcg_gen_qtrace_qemu_ld_i64(TCGv_i64 arg, TCGv addr, int size)
     QTRACE_INSTRUMENT_END();
 }
 
+static inline void tcg_gen_qtrace_qemu_micro_ld(TCGv_i64 ret, TCGv_ptr envptr,
+                                                tcg_target_long offset, int size) {
+    (void) envptr;
+    QTRACE_INSTRUMENT_START();
+
+    TCGv_i32 argidx = tcg_const_i32(GET_TCGV_I64(ret));
+    TCGv_i32 ldsize = tcg_const_i32(size);
+    TCGv_i32 offsetval = tcg_const_i32(offset);
+
+    gen_helper_qtrace_micro_ld(argidx, offsetval, ldsize);
+
+    tcg_temp_free_i32(argidx);
+    tcg_temp_free_i32(ldsize);
+    tcg_temp_free_i32(offsetval);
+
+    QTRACE_INSTRUMENT_END();
+}
+
 static inline void tcg_gen_qtrace_qemu_st(TCGv arg, TCGv addr, int size) {
     QTRACE_INSTRUMENT_START();
 
@@ -104,6 +122,25 @@ static inline void tcg_gen_qtrace_qemu_st_i64(TCGv_i64 arg, TCGv addr, int size)
 
     QTRACE_INSTRUMENT_END();
 }
+
+static inline void tcg_gen_qtrace_qemu_micro_st(TCGv_i64 arg1, TCGv_ptr envptr,
+                                                tcg_target_long offset, int size) {
+    (void) envptr;
+    QTRACE_INSTRUMENT_START();
+
+    TCGv_i32 argidx = tcg_const_i32(GET_TCGV_I64(arg1));
+    TCGv_i32 stsize = tcg_const_i32(size);
+    TCGv_i32 offsetaddr = tcg_const_i32(offset);
+
+    gen_helper_qtrace_micro_st(argidx, offsetaddr, stsize);
+
+    tcg_temp_free_i32(argidx);
+    tcg_temp_free_i32(stsize);
+    tcg_temp_free_i32(offsetaddr);
+
+    QTRACE_INSTRUMENT_END();
+}
+
 
 static inline void tcg_gen_qtrace_mov(TCGv_i32 ret, TCGv_i32 arg) {
     QTRACE_INSTRUMENT_START();

@@ -6,7 +6,7 @@
 #include "tcgtaint_int_fns.h"
 
 void tcgtaint_taint_register(bool istmp, unsigned char regno, int label) {
-  tcgtaint_ctx.taint_engine->setTaintedRegister(label, istmp, regno);
+  tcgtaint_ctx.taint_engine->setTaintedRegister(label, RegisterKind(istmp), regno);
 }
 
 void tcgtaint_taint_virtual_memory(target_ulong addr, unsigned int size, int label) {

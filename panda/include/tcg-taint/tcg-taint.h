@@ -9,6 +9,12 @@ extern bool qtrace_taint_instrumentation_enabled;
     avoid instrumentation of our own code (and thus possible endless loops) */
 extern bool qtrace_in_instrumentation;
 
+/** "true" when tcg is generating sse instructions
+    we use it to only instrument non-instrumentation micro ops
+    (ie. we don't want to instrument panda's own instrumentation)*/
+extern bool qtrace_tcg_is_generating_sse;
+
+
 #ifdef __cplusplus
 extern "C" {
 #endif

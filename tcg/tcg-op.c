@@ -644,6 +644,8 @@ void tcg_gen_deposit_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2,
     TCGv_i32 t1;
 
 #ifdef CONFIG_QTRACE_TAINT
+    // QUESTION(vigliag) is this first mov superfluous?
+    // gen_qtrace_deposit generates a mov by itself (in the helper)
     tcg_gen_qtrace_mov(ret, arg1);
     tcg_gen_qtrace_deposit(ret, arg1, arg2, ofs, len);
 #endif
@@ -924,6 +926,8 @@ void tcg_gen_mulu2_i32(TCGv_i32 rl, TCGv_i32 rh, TCGv_i32 arg1, TCGv_i32 arg2)
 {
 
 #ifdef CONFIG_QTRACE_TAINT
+    // CHECK(vigliag) can these combine3 create problems?
+    // (can they generate other instrumented instructions in the else branches?)
     tcg_gen_qtrace_combine3(INDEX_op_mulu2_i32, rl, arg1, arg2);
     tcg_gen_qtrace_combine3(INDEX_op_mulu2_i32, rh, arg1, arg2);
 #endif
@@ -2720,7 +2724,8 @@ void tcg_gen_qemu_ld_i64(TCGv_i64 val, TCGv addr, TCGArg idx, TCGMemOp memop)
     }
 
 #ifdef CONFIG_QTRACE_TAINT
-    //only if target_reg_bits == 64 (otherwise the 32bit version is called)
+    // if it's not a 32bit operation in disguise
+    // in that case, we generated an instrumented load before and the function returned
     if(qtrace_taint_instrumentation_enabled){
         tcg_gen_qtrace_qemu_ld_i64(val, addr, memop_bits(memop));
     }

@@ -34,10 +34,20 @@ void helper_qtrace_reg2mem(target_ulong reg, target_ulong addr,
   notify_taint_moveR2M(istmp, REG_IDX(istmp, reg), addr, size);
 }
 
+void helper_qtrace_micro_st(target_ulong reg, target_ulong addr,
+                            uint32_t size){
+   notify_taint_micro_st(REG_IDX(true, reg), addr, size);
+}
+
 void helper_qtrace_mem2reg(target_ulong reg, target_ulong addr,
                                      uint32_t size) {
   bool istmp = register_is_temp(reg);
   notify_taint_moveM2R(addr, size, istmp, REG_IDX(istmp, reg));
+}
+
+void helper_qtrace_micro_ld(target_ulong reg, target_ulong addr,
+                            uint32_t size){
+   notify_taint_micro_ld(REG_IDX(true,reg), addr, size);
 }
 
 void helper_qtrace_mov(target_ulong ret, target_ulong arg) {
@@ -106,10 +116,16 @@ void helper_qtrace_deposit(target_ulong dst,
      taint-tracking is performed at the byte-level
 
      WARNING(vigliag) there was an assertion here:
+
      ((ofs % 8) == 0 && (len % 8) == 0 && (ofs+len) <= 32)
      which is now failing with values such as dst=4, op1=4, op2=35, ofs=0, len=1
+
+     NOTE: len=1 seems to be the result of this call:
+     tcg_gen_deposit_tl(cpu_cc_src, cpu_cc_src, cpu_tmp4, ctz32(CC_C), 1);
+     all the others have hardcoded values of multiple of 8
+
      I'm also changing this function to pass offset and len in bits when notifying
-     for consistency with the other function
+     for consistency with the other functions (it originally did a division)
    */
 
     bool dsttmp = register_is_temp(dst);

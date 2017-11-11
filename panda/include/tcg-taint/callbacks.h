@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #define target_ulong uint32_t
+
 /* Allocation of CPU registers */
 typedef void (*notify_taint_regalloc_t)(target_ulong reg, const char *name);
 extern notify_taint_regalloc_t notify_taint_regalloc;
@@ -15,6 +16,13 @@ extern notify_taint_moveR2M_t notify_taint_moveR2M;
 
 typedef void (*notify_taint_moveR2R_t)(bool srctmp, target_ulong src, bool dsttmp, target_ulong dst);
 extern notify_taint_moveR2R_t notify_taint_moveR2R;
+
+/* Micro ops */
+typedef void (*notify_taint_micro_ld_t)(target_ulong reg, target_ulong addr, uint32_t size);
+extern notify_taint_micro_ld_t notify_taint_micro_ld;
+
+typedef void (*notify_taint_micro_st_t)(target_ulong reg, target_ulong addr, uint32_t size);
+extern notify_taint_micro_st_t notify_taint_micro_st;
 
 /* Move a source (sub)register into destination (sub)register */
 typedef void (*notify_taint_moveR2R_offset_t)(bool srctmp, target_ulong src,

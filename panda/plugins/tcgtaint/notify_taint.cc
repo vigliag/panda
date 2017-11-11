@@ -29,7 +29,7 @@ namespace qtrace {
 
 void notify_taint_moveM2R(target_ulong addr, int size, bool istmp,
                           target_ulong reg) {
-  assert(size == 0 || size > 7);
+  assert(size > 7);
   size = size / 8;
 
   hwaddr phyaddr = virt_to_phys(addr, size);
@@ -38,12 +38,20 @@ void notify_taint_moveM2R(target_ulong addr, int size, bool istmp,
     return;
   }
 
-  tcgtaint_ctx.taint_engine->moveM2R(phyaddr, size, istmp, reg);
+  tcgtaint_ctx.taint_engine->moveM2R(phyaddr, size, RegisterKind(istmp), reg);
+}
+
+// We are practically storing into a register
+void notify_taint_micro_ld(uint32_t reg, uint32_t addr, uint32_t size) {
+  assert(size > 7);
+  size = size / 8;
+  tcgtaint_ctx.taint_engine->moveMicroM2R(addr, size, RegisterKind::temporary,
+                                          reg);
 }
 
 void notify_taint_moveR2M(bool istmp, target_ulong reg, target_ulong addr,
                           int size) {
-  assert(size == 0 || size > 7);
+  assert(size > 7);
   size = size / 8;
 
   hwaddr phyaddr = virt_to_phys(addr, size);
@@ -52,12 +60,20 @@ void notify_taint_moveR2M(bool istmp, target_ulong reg, target_ulong addr,
     return;
   }
 
-  tcgtaint_ctx.taint_engine->moveR2M(istmp, reg, phyaddr, size);
+  tcgtaint_ctx.taint_engine->moveR2M(RegisterKind(istmp), reg, phyaddr, size);
+}
+
+void notify_taint_micro_st(uint32_t reg, uint32_t addr, uint32_t size) {
+  assert(size == 0 || size > 7);
+  size = size / 8;
+
+  tcgtaint_ctx.taint_engine->moveR2MicroM(RegisterKind::temporary, reg, addr, size);
 }
 
 void notify_taint_moveR2R(bool srctmp, target_ulong src, bool dsttmp,
                           target_ulong dst) {
-  tcgtaint_ctx.taint_engine->moveR2R(srctmp, src, dsttmp, dst);
+  tcgtaint_ctx.taint_engine->moveR2R(RegisterKind(srctmp), src,
+                                     RegisterKind(dsttmp), dst);
 }
 
 void notify_taint_moveR2R_offset(bool srctmp, target_ulong src,
@@ -72,12 +88,12 @@ void notify_taint_moveR2R_offset(bool srctmp, target_ulong src,
      taint-tracking is performed at the byte-level */
   // TODO(vigliag) I guess it is probably better to taint the whole byte,
   // approximating per excess
-  tcgtaint_ctx.taint_engine->moveR2R(srctmp, src, srcoff, dsttmp, dst, dstoff,
-                                     size);
+  tcgtaint_ctx.taint_engine->moveR2R(RegisterKind(srctmp), src, srcoff,
+                                     RegisterKind(dsttmp), dst, dstoff, size);
 }
 
 void notify_taint_clearR(bool istmp, target_ulong reg) {
-  tcgtaint_ctx.taint_engine->clearRegister(istmp, reg);
+  tcgtaint_ctx.taint_engine->clearRegister(RegisterKind(istmp), reg);
 }
 
 void notify_taint_clearM(target_ulong addr, int size) {
@@ -105,7 +121,8 @@ void notify_taint_regalloc(target_ulong reg, const char *name) {
 
 void notify_taint_combineR2R(bool srctmp, target_ulong src, bool dsttmp,
                              target_ulong dst) {
-  tcgtaint_ctx.taint_engine->combineR2R(srctmp, src, dsttmp, dst);
+  tcgtaint_ctx.taint_engine->combineR2R(RegisterKind(srctmp), src,
+                                        RegisterKind(dsttmp), dst);
 }
 
 void notify_taint_assert(target_ulong reg, bool istrue) {
@@ -113,7 +130,8 @@ void notify_taint_assert(target_ulong reg, bool istrue) {
           tcgtaint_ctx.taint_engine->getRegisterName(reg), reg,
           istrue ? "" : " NOT");
 
-  bool b = tcgtaint_ctx.taint_engine->isTaintedRegister(false, reg, 0);
+  bool b = tcgtaint_ctx.taint_engine->isTaintedRegister(RegisterKind::global,
+                                                        reg, 0);
   assert(istrue ? b : !b);
 }
 
@@ -124,4 +142,5 @@ void notify_taint_assert(target_ulong reg, bool istrue) {
 // bool notify_taint_get_state(void) {
 //  return tcgtaint_ctx.taint_engine->isUserEnabled();
 //}
+
 } // namespace qtrace

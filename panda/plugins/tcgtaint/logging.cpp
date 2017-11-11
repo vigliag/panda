@@ -7,8 +7,13 @@
 #include <cstdio>
 #include <cstdarg>
 #include <cstring>
+#include <panda/plugin.h>
 
 static FILE *logfile;
+
+static uint32_t get_current_pc(){
+    return panda_current_pc(current_cpu);
+}
 
 int log_init(const char *filename) {
   if (!filename) {
@@ -25,7 +30,7 @@ int log_init(const char *filename) {
   return 0;
 }
 
-void qtrace_log_(const char *f, unsigned int l, const char *tag,
+void qtrace_log_(unsigned int l, const char *tag,
                  const char *fmt, ...) {
   va_list ap;
   char tmp[1024];
@@ -36,10 +41,10 @@ void qtrace_log_(const char *f, unsigned int l, const char *tag,
 
   char pc[32];
 
-#if defined(LOG_PC) && defined(CONFIG_QTRACE_SYSCALL)
-  CpuRegisters regs;
-  if (gbl_context.cb_regs && gbl_context.cb_regs(&regs) == 0) {
-    snprintf(pc, sizeof(pc), "@%.8x ", regs.pc);
+#if defined(LOG_PC)
+  uint32_t pcval = get_current_pc();
+  if (pcval) {
+    snprintf(pc, sizeof(pc), "@%.8x ", pcval);
   } else {
     snprintf(pc, sizeof(pc), "@_unknown ");
   }
@@ -47,6 +52,6 @@ void qtrace_log_(const char *f, unsigned int l, const char *tag,
   pc[0] = '\0';
 #endif
 
-  fprintf(logfile ? logfile : stderr, "_QTrace_ %s[%s:%d] [%s] %s\n", pc, f, l,
+  fprintf(logfile ? logfile : stderr, "_taint %s[:%d] [%s] %s\n", pc, l,
           tag, tmp);
 }

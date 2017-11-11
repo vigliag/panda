@@ -548,6 +548,10 @@ void tcg_gen_bswap16_i64(TCGv_i64 ret, TCGv_i64 arg);
 void tcg_gen_bswap32_i64(TCGv_i64 ret, TCGv_i64 arg);
 void tcg_gen_bswap64_i64(TCGv_i64 ret, TCGv_i64 arg);
 
+#ifdef CONFIG_QTRACE_TAINT
+#include "tcg-taint/tcg-op.h"
+#endif
+
 #if TCG_TARGET_REG_BITS == 64
 static inline void tcg_gen_discard_i64(TCGv_i64 arg)
 {
@@ -605,6 +609,15 @@ static inline void tcg_gen_ld32s_i64(TCGv_i64 ret, TCGv_ptr arg2,
 static inline void tcg_gen_ld_i64(TCGv_i64 ret, TCGv_ptr arg2,
                                   tcg_target_long offset)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    if(qtrace_taint_instrumentation_enabled &&
+            qtrace_tcg_is_generating_sse){
+        //arg1 is a normal temp register
+        //arg2 is a pointer to env
+        //offset is the offset from env to the point in the register
+        tcg_gen_qtrace_qemu_micro_ld(ret, arg2, offset, 64);
+    }
+#endif
     tcg_gen_ldst_op_i64(INDEX_op_ld_i64, ret, arg2, offset);
 }
 
@@ -629,6 +642,15 @@ static inline void tcg_gen_st32_i64(TCGv_i64 arg1, TCGv_ptr arg2,
 static inline void tcg_gen_st_i64(TCGv_i64 arg1, TCGv_ptr arg2,
                                   tcg_target_long offset)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    if(qtrace_taint_instrumentation_enabled &&
+            qtrace_tcg_is_generating_sse){
+        //arg1 is a normal temp register
+        //arg2 is a pointer to env
+        //offset is the offset from env to the point in the register
+        tcg_gen_qtrace_qemu_micro_st(arg1, arg2, offset, 64);
+    }
+#endif
     tcg_gen_ldst_op_i64(INDEX_op_st_i64, arg1, arg2, offset);
 }
 
@@ -803,10 +825,6 @@ static inline void tcg_gen_insn_start(target_ulong pc, target_ulong a1,
 # endif
 #else
 # error "Unhandled number of operands to insn_start"
-#endif
-
-#ifdef CONFIG_QTRACE_TAINT
-#include "tcg-taint/tcg-op.h"
 #endif
 
 static inline void tcg_gen_exit_tb(uintptr_t val)

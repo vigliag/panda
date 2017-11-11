@@ -28,6 +28,11 @@ namespace qtrace {
   void notify_taint_moveR2R(bool srctmp, target_ulong src,
                             bool dsttmp, target_ulong dst);
 
+  /* Micro ops */
+
+  void notify_taint_micro_ld(target_ulong reg, target_ulong addr, uint32_t size);
+  void notify_taint_micro_st(target_ulong reg, target_ulong addr, uint32_t size);
+
   /* Move a source (sub)register into destination (sub)register */
   void notify_taint_moveR2R_offset(bool srctmp, target_ulong src,
                                    unsigned int srcoff,

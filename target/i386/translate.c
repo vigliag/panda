@@ -4606,9 +4606,6 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 } else {
                     opreg = rm;
                 }
-                //VIGLIAG QTRACE
-                //here qtrace called tcg_gen_qtrace_clearR if the op was clearing the register
-                //the called function is added in tcg-op.h, which gets included in this file
 #ifdef CONFIG_QTRACE_TAINT
                 /* Check for SUB/SBB operations involving the same register as
                    source and destination; in these situations, taint status
@@ -8255,7 +8252,13 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0x1c2:
     case 0x1c4 ... 0x1c6:
     case 0x1d0 ... 0x1fe:
+#ifdef CONFIG_QTRACE_TAINT
+        qtrace_tcg_is_generating_sse = true;
+#endif
         gen_sse(env, s, b, pc_start, rex_r);
+#ifdef CONFIG_QTRACE_TAINT
+        qtrace_tcg_is_generating_sse = false;
+#endif
         break;
     default:
         goto unknown_op;

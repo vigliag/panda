@@ -69,12 +69,15 @@ private:
 };
 
 
-//
-// ShadowMemory class is used to represent the taint status for the emulated
-// memory.
-//
-typedef std::unordered_map<target_ulong,
-                           std::shared_ptr<TaintLocation> > shadowmemory_t;
+
+using shadowmemory_t = std::unordered_map<target_ulong,
+    std::shared_ptr<TaintLocation> >;
+
+/**
+ * @brief The ShadowMemory class is used to represent the taint status for the
+ * emulated memory.
+ * It uses a shadowmemory_t (map of taint locations) as underlying storage
+ */
 class ShadowMemory {
 public:
   explicit ShadowMemory() {}
@@ -114,14 +117,16 @@ private:
 };
 
 
-//
-// The ShadowRegister class represents the tainted status of a CPU register.
-//
+
+/**
+ * @brief The ShadowRegister class represents the tainted status of a CPU
+ *  register. It is implemented as an array of TaintLocation.
+ */
 class ShadowRegister {
 public:
   // Initialize a tainted register, given its size (in bytes)
   // CHECK(vigliag) it was previously initialized to target_ulong,
-  // but the tcg target architecture (and tcg temp registers) are 64bit
+  // but the tcg target architecture (and tcg temp registers) are 64bit (tcg_target_ulong?)
   explicit ShadowRegister(unsigned int size = sizeof(uint64_t))
     : size_(size) {
     reg_  = new TaintLocation[size];
@@ -170,8 +175,8 @@ public:
   void combine(const TaintLocation *loc, int offset);
 
   // Get the size of this register
-  inline int getSize() const {
-    return size_;
+  inline unsigned getSize() const {
+    return (unsigned) size_;
   }
 
   // Check if this register is tainted

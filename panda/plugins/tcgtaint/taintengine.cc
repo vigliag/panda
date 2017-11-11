@@ -16,30 +16,15 @@
   ((obj)->getName().length() > 0 ? (obj)->getName().c_str() : "noname")
 #define REGTAINT(obj) ((obj)->isTainted() ? 'T' : 'C')
 
-// void TaintEngine::setEnabled(bool status) {
-//  qtrace_taint_enabled = status;
-//}
-
-// void TaintEngine::setUserEnabled(bool status) {
-//  taint_user_enabled_ = status;
-//  if (!status) {
-//    setEnabled(false);
-//  }
-//}
-
-// bool TaintEngine::isUserEnabled() {
-//  return taint_user_enabled_;
-//}
-
 void TaintEngine::setRegisterName(target_ulong regno, const char *name) {
-  ShadowRegister *reg = getRegister(false, regno);
+  ShadowRegister *reg = getRegister(RegisterKind::global, regno);
   assert(reg);
   assert(reg->getName().length() == 0);
   reg->setName(name);
 }
 
 const char *TaintEngine::getRegisterName(target_ulong regno) {
-  ShadowRegister *reg = getRegister(false, regno);
+  ShadowRegister *reg = getRegister(RegisterKind::global, regno);
   return REGNAME(reg);
 }
 
@@ -54,28 +39,30 @@ bool TaintEngine::getRegisterIdByName(const char *name,
   return false;
 }
 
-ShadowRegister *TaintEngine::getRegister(bool istmp, target_ulong reg) {
-  if (istmp) {
+ShadowRegister *TaintEngine::getRegister(RegisterKind istmp, target_ulong reg) {
+  switch(istmp) {
+  case RegisterKind::temporary:
     assert(reg < NUM_TMP_REGS);
     return &tmpregs_[reg];
-  } else {
+  case RegisterKind::global:
     assert(reg < NUM_CPU_REGS);
     return &cpuregs_[reg];
   }
+  return nullptr;
 }
 
-void TaintEngine::setTaintedRegister(int label, bool istmp,
+void TaintEngine::setTaintedRegister(int label, RegisterKind istmp,
                                      target_ulong regno) {
   ShadowRegister *reg = getRegister(istmp, regno);
 
-  TRACE("Tainting register R%c(%.2x %s) with label %.8x", REGCHR(istmp), regno,
+  TRACE("Tainting register R%c(%.2x %s) with label %d", REGCHR(istmp), regno,
         REGNAME(reg), label);
 
   reg->set(label);
   _updateRegisterCache(istmp, regno, true);
 }
 
-bool TaintEngine::isTaintedRegister(bool tmp, target_ulong regno,
+bool TaintEngine::isTaintedRegister(RegisterKind tmp, target_ulong regno,
                                     unsigned int offset, int size) {
   // Try the fast path first
   if (!isTaintedRegister(tmp, regno)) {
@@ -99,7 +86,7 @@ bool TaintEngine::isTaintedRegister(bool tmp, target_ulong regno,
 
 void TaintEngine::setTaintedMemory(int label, target_ulong addr,
                                    unsigned int size) {
-  TRACE("Tainting %d bytes at %.8x with label %.8x", size, addr, label);
+  TRACE("Tainting %d bytes at %.8x with label %d", size, addr, label);
   for (unsigned int i = 0; i < size; i++) {
     mem_.addLabel(addr + i, label);
   }
@@ -114,7 +101,7 @@ bool TaintEngine::isTaintedMemory(target_ulong addr, unsigned int size) const {
   return false;
 }
 
-void TaintEngine::clearRegister(bool tmp, target_ulong regno) {
+void TaintEngine::clearRegister(RegisterKind tmp, target_ulong regno) {
   if (!isTaintedRegister(tmp, regno)) {
     // Nothing to do
     return;
@@ -130,7 +117,7 @@ void TaintEngine::clearMemory(target_ulong addr, int size) {
   mem_.clear(addr, size);
 }
 
-void TaintEngine::moveR2R(bool srctmp, target_ulong src, bool dsttmp,
+void TaintEngine::moveR2R(RegisterKind srctmp, target_ulong src, RegisterKind dsttmp,
                           target_ulong dst) {
   if (!isTaintedRegister(srctmp, src) && !isTaintedRegister(dsttmp, dst)) {
     // Nothing to do
@@ -148,10 +135,11 @@ void TaintEngine::moveR2R(bool srctmp, target_ulong src, bool dsttmp,
   _updateRegisterCache(dsttmp, dst, dstreg->isTainted());
 }
 
-void TaintEngine::moveR2R(bool srctmp, target_ulong src, unsigned int srcoff,
-                          bool dsttmp, target_ulong dst, unsigned int dstoff,
+void TaintEngine::moveR2R(RegisterKind srctmp, target_ulong src, unsigned int srcoff,
+                          RegisterKind dsttmp, target_ulong dst, unsigned int dstoff,
                           int size) {
-  assert(size < 8);
+  assert(size <= 8);
+
   if (!isTaintedRegister(srctmp, src) && !isTaintedRegister(dsttmp, dst)) {
     // Nothing to do
     return;
@@ -160,17 +148,17 @@ void TaintEngine::moveR2R(bool srctmp, target_ulong src, unsigned int srcoff,
   ShadowRegister *dstreg = getRegister(dsttmp, dst);
   ShadowRegister *srcreg = getRegister(srctmp, src);
 
-  for (int i = 0; i < size; i++) {
+  for (unsigned i = 0; i < size; i++) {
     TRACE("Taint moving 1 byte R%c(%.2x %s %c @%d) -> R%c(%.2x %s %c @%d)",
-          REGCHR(srctmp), src, REGNAME(srcreg), srcoff + i, REGTAINT(srcreg),
-          REGCHR(dsttmp), dst, REGNAME(dstreg), dstoff + i, REGTAINT(dstreg));
+          REGCHR(srctmp), src, REGNAME(srcreg), REGTAINT(srcreg), srcoff + i,
+          REGCHR(dsttmp), dst, REGNAME(dstreg), REGTAINT(dstreg), dstoff + i );
     dstreg->set(srcreg->getTaintLocation(srcoff + i), dstoff + i);
   }
 
   _updateRegisterCache(dsttmp, dst, dstreg->isTainted());
 }
 
-void TaintEngine::combineR2R(bool srctmp, target_ulong src, bool dsttmp,
+void TaintEngine::combineR2R(RegisterKind srctmp, target_ulong src, RegisterKind dsttmp,
                              target_ulong dst) {
   if (!isTaintedRegister(srctmp, src)) {
     // Nothing to do
@@ -188,31 +176,54 @@ void TaintEngine::combineR2R(bool srctmp, target_ulong src, bool dsttmp,
   _updateRegisterCache(dsttmp, dst, dstreg->isTainted());
 }
 
-void TaintEngine::moveM2R(target_ulong addr, int size, bool regtmp,
+void TaintEngine::moveM2R(target_ulong addr, unsigned size, RegisterKind regtmp,
                           target_ulong reg) {
+  assert(size <= 8);
   ShadowRegister *regobj = getRegister(regtmp, reg);
 
-  for (int i = 0; i < std::min(size, regobj->getSize()); i++) {
+  for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
     if (!mem_.isTaintedAddress(addr + i)) {
       if (regobj->isTaintedByte(i)) {
-        TRACE("Clearing M(%.8x) -> R%c(%.2x %s)", addr + i, REGCHR(regtmp), reg,
-              REGNAME(regobj));
+        TRACE("Clearing M(%.8x) -> R%c(%.2x %s), off=%d", addr + i, REGCHR(regtmp), reg,
+              REGNAME(regobj),i);
         regobj->clear(i, 1);
       }
     } else {
-      TRACE("Taint moving M(%.8x) -> R%c(%.2x %s)", addr + i, REGCHR(regtmp),
-            reg, REGNAME(regobj));
-      // VIGLIAG HERE THERE WAS A MISSING START
+      TRACE("Taint moving M(%.8x) -> R%c(%.2x %s), lbl=%d, off=%d", addr + i, REGCHR(regtmp),
+            reg, REGNAME(regobj), *mem_.getTaintLocation(addr +i)->getLabels().begin(),i);
       regobj->set(mem_.getTaintLocation(addr + i), i);
     }
   }
   _updateRegisterCache(regtmp, reg, regobj->isTainted());
 }
 
-void TaintEngine::combineM2R(target_ulong addr, int size, bool regtmp,
-                             target_ulong reg) {
+void TaintEngine::moveMicroM2R(target_ulong addr, unsigned size, RegisterKind regtmp,
+                          target_ulong reg) {
+  assert(size <= 8);
   ShadowRegister *regobj = getRegister(regtmp, reg);
-  for (int i = 0; i < std::min(size, regobj->getSize()); i++) {
+
+  for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
+    if (!cpuarchstate_.isTaintedAddress(addr + i)) {
+      if (regobj->isTaintedByte(i)) {
+        TRACE("Clearing MicroM(%.8x) -> R%c(%.2x %s), off=%d", addr + i, REGCHR(regtmp), reg,
+              REGNAME(regobj),i);
+        regobj->clear(i, 1);
+      }
+    } else {
+      TRACE("Taint moving MicroM(%.8x) -> R%c(%.2x %s), lbl=%d, off=%d", addr + i, REGCHR(regtmp),
+            reg, REGNAME(regobj), *cpuarchstate_.getTaintLocation(addr +i)->getLabels().begin(),i);
+      regobj->set(cpuarchstate_.getTaintLocation(addr + i), i);
+    }
+  }
+  _updateRegisterCache(regtmp, reg, regobj->isTainted());
+}
+
+void TaintEngine::combineM2R(target_ulong addr, unsigned size, RegisterKind regtmp,
+                             target_ulong reg) {
+  assert(size <= 8);
+
+  ShadowRegister *regobj = getRegister(regtmp, reg);
+  for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
     if (mem_.isTaintedAddress(addr + i)) {
       regobj->combine(mem_.getTaintLocation(addr + i), i);
     }
@@ -220,13 +231,14 @@ void TaintEngine::combineM2R(target_ulong addr, int size, bool regtmp,
   _updateRegisterCache(regtmp, reg, regobj->isTainted());
 }
 
-void TaintEngine::moveR2M(bool regtmp, target_ulong reg, target_ulong addr,
-                          int size) {
+void TaintEngine::moveR2M(RegisterKind regtmp, target_ulong reg, target_ulong addr,
+                          unsigned size) {
 
-  //NOTE: this can gets passed 8bytes temporary registers from st_i64
+  //NOTE: this can get passed 8bytes temporary registers from st_i64
+  assert(size <= 8);
 
   ShadowRegister *regobj = getRegister(regtmp, reg);
-  for (int i = 0; i < std::min(size, regobj->getSize()); i++) {
+  for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
     if (!regobj->isTaintedByte(i)) {
       if (mem_.isTaintedAddress(addr + i)) {
         // Source is not tainted but destination is: clear
@@ -236,18 +248,43 @@ void TaintEngine::moveR2M(bool regtmp, target_ulong reg, target_ulong addr,
       }
     } else {
       // Source is tainted: move
-      TRACE("Taint moving R%c(%.2x %s) -> M(%.8x)", REGCHR(regtmp), reg,
-            REGNAME(regobj), addr + i);
+      TRACE("Taint moving R%c(%.2x %s) -> M(%.8x), lb=%d", REGCHR(regtmp), reg,
+            REGNAME(regobj), addr + i, *regobj->getTaintLocation(i)->getLabels().begin());
       mem_.set(regobj->getTaintLocation(i), addr + i);
     }
   }
 }
 
-void TaintEngine::combineR2M(bool regtmp, target_ulong reg, target_ulong addr,
-                             int size) {
+void TaintEngine::moveR2MicroM(RegisterKind regtmp, target_ulong reg, target_ulong addr,
+                          unsigned size) {
+  TRACE("moveR2MicroM reg=%d addr=%x size=%d", reg, addr, size);
+  //NOTE: this can get passed 8bytes temporary registers from st_i64
+  assert(size <= 8);
+
+  ShadowRegister *regobj = getRegister(regtmp, reg);
+  for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
+    if (!regobj->isTaintedByte(i)) {
+      if (cpuarchstate_.isTaintedAddress(addr + i)) {
+        // Source is not tainted but destination is: clear
+        TRACE("Clearing R%c(%.2x %s) -> MicroM(%.8x)", REGCHR(regtmp), reg,
+              REGNAME(regobj), addr + i);
+        cpuarchstate_.clear(addr + i);
+      }
+    } else {
+      // Source is tainted: move
+      TRACE("Taint moving R%c(%.2x %s) -> MicroM(%.8x), lb=%d", REGCHR(regtmp), reg,
+            REGNAME(regobj), addr + i, *regobj->getTaintLocation(i)->getLabels().begin());
+      cpuarchstate_.set(regobj->getTaintLocation(i), addr + i);
+    }
+  }
+}
+
+void TaintEngine::combineR2M(RegisterKind regtmp, target_ulong reg, target_ulong addr,
+                             unsigned size) {
+  assert(size <= 8);
   ShadowRegister *regobj = getRegister(regtmp, reg);
 
-  for (int i = 0; i < std::min(size, regobj->getSize()); i++) {
+  for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
     if (regobj->isTaintedByte(i)) {
       mem_.combine(regobj->getTaintLocation(i), addr + i);
     }
