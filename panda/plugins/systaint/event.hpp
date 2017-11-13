@@ -81,7 +81,8 @@ struct Event {
         case EventKind::unknown:
             res << "unknown "; break;
         }
-        res << "id " << getLabel() << " started " << started << " thread " << thread.second;
+        res << "id " << getLabel() << " ep: " << entrypoint
+            << " started " << started << " thread " << thread.second;
         return res.str();
     }
 

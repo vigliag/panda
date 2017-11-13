@@ -377,9 +377,17 @@ int get_callers(target_ulong callers[], int n, CPUState* cpu) {
     return i;
 }
 
+/**
+ * @brief get_call_entries gets you the topmost n entries from the shadow stack
+ *        in reversed order (topmost first)
+ * @param entries, out array of entries with at least n positions
+ * @param n, max number of entries to return
+ * @param cpu, cpu
+ * @return the number of entries written
+ */
 int get_call_entries(struct CallstackStackEntry entries[], int n, CPUState *cpu){
     std::vector<stack_entry> &v = callstacks[get_stackid(cpu)];
-    auto rit = v.rbegin();
+    auto rit = v.rbegin(); //reverse iterator
     int i = 0;
     for (/*no init*/; rit != v.rend() && i < n; ++rit, ++i) {
         entries[i] = *rit;
@@ -498,16 +506,32 @@ bool init_plugin(void *self) {
 
     const char *stackid_strategy_str = panda_parse_string_opt(args, "stackid_strategy", nullptr, "strategy to employ in obtaining a stack identifier (thread_id, heuristic, asid)");
     if (stackid_strategy_str == nullptr) {
-        stackid_strategy = StackidStrategy::ASID;
+        if(panda_os_type == OST_WINDOWS && 0 == strcmp(panda_os_details, "7")){
+            stackid_strategy = StackidStrategy::THREAD_ID;
+        } else {
+            stackid_strategy = StackidStrategy::ASID;
+        }
     } else if (0 == strcmp(stackid_strategy_str, "thread_id")) {
         stackid_strategy = StackidStrategy::THREAD_ID;
-        std::cout << "callstack_instr employing thread_id strategy" << std::endl;
     } else if (0 == strcmp(stackid_strategy_str, "heuristic")) {
         stackid_strategy = StackidStrategy::STACKPOINTER_HEURISTIC;
-        std::cout << "callstack_instr employing stackpointer_heuristic strategy" << std::endl;
+    } else if (0 == strcmp(stackid_strategy_str, "asid")){
+        stackid_strategy = StackidStrategy::ASID;
     } else {
         std::cerr << "unrecognized option " << stackid_strategy_str << std::endl;
         return false;
+    }
+
+    switch (stackid_strategy) {
+    case StackidStrategy::THREAD_ID:
+        std::cout << "callstack_instr employing thread_id strategy" << std::endl;
+        break;
+    case StackidStrategy::ASID:
+        std::cout << "callstack_instr employing asid strategy" << std::endl;
+        break;
+    case StackidStrategy::STACKPOINTER_HEURISTIC:
+        std::cout << "callstack_instr employing stackpointer_heuristic strategy" << std::endl;
+        break;
     }
 
     return true;

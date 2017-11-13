@@ -51,6 +51,10 @@ using Address = target_ulong;
 using Tag = uint32_t;
 using Label = uint32_t;
 
+
+// Opened filepointer for writing the collected data
+static FILE* outfp = nullptr;
+
 //using dependencySet = std::unordered_set<EventID>;
 
 class EventTracker {
@@ -83,16 +87,19 @@ public:
         existing_events.push_back(event);
     }
 
-    void closeEvent(const FQThreadId& thread_id, Event& event){
-        auto& events = curr_events[thread_id];
-        //remove all events above the current one from the event stack
-        //TODO those events should be logged, not discarded
-        events.erase(std::find_if(events.begin(), events.end(),
-                                    [&event](const shared_ptr<Event>& cev){
-                                           return cev->getLabel() == event.getLabel();
-                                    }),
-                                    events.end());
+    void closeEvent(const FQThreadId &thread_id, Event &event) {
+      auto &events = curr_events[thread_id];
+      // remove all events above the current one from the event stack
+      // TODO those events should be logged, not discarded
+      auto closing_evnt_it = std::find_if(
+          events.begin(), events.end(), [&event](const shared_ptr<Event> &cev) {
+            return cev->getLabel() == event.getLabel();
+          });
 
+      for(auto it = closing_evnt_it; it != events.end(); it++){
+          logEvent(**it, outfp);
+      }
+      events.erase(closing_evnt_it, events.end());
     }
 };
 
@@ -129,8 +136,6 @@ static uint64_t target_taint_at = 0;
 // Globals:
 //////////////
 
-// Opened filepointer for writing collected function data
-static FILE* outfp = nullptr;
 
 std::set<Asid> monitored_processes; //shared with syscall_listener
 
@@ -144,6 +149,7 @@ static EventTracker events;
 
 static std::set<hwaddr> phisicalAddressesToTaint;
 
+static uint32_t next_available_label = 0;
 
 // Wrappers:
 
@@ -225,11 +231,13 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
 
     cout << "EVENT exit " << event->toString() << endl;
 
-    if(!no_callstack){
-        std::vector<target_ulong> current_callstack(10);
-        uint32_t callstacksize = get_callers(current_callstack.data(), static_cast<int>(current_callstack.size()), cpu);
-        current_callstack.resize(callstacksize);
-        event->callstack = std::move(current_callstack);
+    if (!no_callstack) {
+      std::vector<target_ulong> current_callstack(10);
+      int callstacksize =
+          get_functions(current_callstack.data(),
+                      static_cast<int>(current_callstack.size()), cpu);
+      current_callstack.resize(callstacksize);
+      event->callstack = std::move(current_callstack);
     }
 
     //logging
@@ -242,16 +250,33 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
     }
 }
 
+bool syscall_to_discard(unsigned syscall_no) {
+  switch (syscall_no) {
+  case 371: // NtTerminateThread (non terminating)
+  case 389: // NtWaitForMultipleObjects
+  case 392: // NtWaitForWorkViaWorkerFactory
+  case 98:  // NtDelayExecution
+  case 391: // NtWaitForSingleObject
+  case 287: // NtRemoveIoCompletion
+  case 39:  // NtAlpcSendWaitReceivePort
+  case 60:  // NTContinue, doesn't return
+  case 19:  // NtAllocateVirtualMemory which is responsible for most noise
+  case 131: // NtFreeVirtualMemory (for simmetry)
+  case 267: // NtQueryVirtualMemory (noise)
+  case 335: // NtSetInformationThread (outlier)
+  case 44:
+    return true;
+  default:
+    return false;
+  }
+}
+
 /**
  * When a sysenter is being executed, and we are about to jump in kernel-space.
  */
 void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
 
-    if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
-       call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
-       call.syscall_no == 131 || // Skip NtFreeVirtualMemory (for simmetry)
-       call.syscall_no == 267 || // Skip NtQueryVirtualMemory
-       call.syscall_no == 44 ){ // Skip NtCallbackReturn, which doesn't return
+    if(syscall_to_discard(call.syscall_no)){
         return;
     }
 
@@ -271,8 +296,9 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     std::shared_ptr<Event> current_event = events.getEvent(thread);
     auto& current_tags = events.getTags(thread);
 
-    if(current_event){
-        cout << "SYSENTER ENCOUNTERED "<< sc.callno <<" "<< sc.name << " while current_event was" << current_event->toString() << endl;
+    if (current_event) {
+      cout << "SYSENTER ENCOUNTERED " << sc.callno << " " << sc.name
+           << " while current_event was" << current_event->toString() << endl;
     }
 
     cout << "SYSENTER " << sc.callno << " " << sc.name << endl;
@@ -280,6 +306,7 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     new_event->kind = EventKind::syscall;
     new_event->entrypoint = static_cast<uint32_t>(sc.callno);
     new_event->started = call.start;
+    new_event->label = next_available_label++;
 
     if(use_candidate_pointers){
         new_event->knownDataPointers.insert(arg_start);
@@ -317,11 +344,7 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
     FQThreadId thread = getFQThreadId(cpu);
     auto current_event = events.getEvent(thread);
 
-    if(call.syscall_no == 60 || // Skip NTContinue, which doesn't return
-       call.syscall_no == 19 || // Skip NtAllocateVirtualMemory which is responsible for most noise
-       call.syscall_no == 131 || // Skip NtFreeVirtualMemory (for simmetry)
-       call.syscall_no == 267 || // Skip NtQueryVirtualMemory
-       call.syscall_no == 44 ){ // Skip NtCallbackReturn, which doesn't return
+    if(syscall_to_discard(call.syscall_no)){
         return;
     }
 
@@ -464,6 +487,7 @@ void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         event->entrypoint = entrypoint;
         event->thread = thread;
         event->started = callid;
+        event->label = next_available_label++;
 
         events.put_event(thread, event);
     }
@@ -536,7 +560,7 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         bool should_taint = true;
 
         if(translation_error){
-            cerr << "Error when translating address " << addr << "to phyisical (won't taint)" << endl;
+            cerr << "Error when translating address " << addr << "to physical (won't taint)" << endl;
             should_taint = false;
         }
 

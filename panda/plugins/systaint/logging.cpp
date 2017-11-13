@@ -109,6 +109,7 @@ void logEvent(const Event& event, FILE* filepointer){
     pbEvent.parent = event.parent;
     pbEvent.pid = event.thread.first;
     pbEvent.thread = event.thread.second;
+    pbEvent.label = event.getLabel();
 
     //Turn depsets to arrays, so we can pass them to protobuf directly
     std::unordered_map<uint32_t, std::vector<uint32_t>> depsetAry = setmap_to_vectormap(event.memory.readsetDeps);
