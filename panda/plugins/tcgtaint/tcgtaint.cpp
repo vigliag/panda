@@ -12,11 +12,11 @@
  *
 PANDAENDCOMMENT */
 
-//required qtrace_taint_instrumentation_enabled __STDC_FORMAT_MACROS
+// required qtrace_taint_instrumentation_enabled __STDC_FORMAT_MACROS
 
-#include "panda/plugin.h"
 #include "tcgtaint.hpp"
 #include "notify_taint.hpp"
+#include "panda/plugin.h"
 #include "tcg-taint/callbacks.h"
 #include "tcg-taint/tcg-taint.h"
 
@@ -31,8 +31,8 @@ bool init_plugin(void *);
 void uninit_plugin(void *);
 }
 
-int tcgtaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
-    (void) tb;
+int tcgtaint_after_block_callback(CPUState *cpu, TranslationBlock *tb) {
+    (void)tb;
 
     // Disable taint when switching to kernel space and viceversa
     //
@@ -51,7 +51,7 @@ int tcgtaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     }
 
     // TODO probably only needed when user manually enables/disables
-    //panda_do_flush_tb();
+    // panda_do_flush_tb();
 
     return 0;
 }
@@ -79,13 +79,13 @@ bool init_plugin(void *self) {
     panda_disable_tb_chaining();
     panda_enable_precise_pc();
 
-    //tcg_taint_instrumentation_enable();
+    // tcg_taint_instrumentation_enable();
 
     panda_cb pcb;
     pcb.after_block_exec = tcgtaint_after_block_callback;
     panda_register_callback(self, PANDA_CB_AFTER_BLOCK_EXEC, pcb);
 
-    //qemu_loglevel |= CPU_LOG_TB_IN_ASM | CPU_LOG_EXEC;
+    // qemu_loglevel |= CPU_LOG_TB_IN_ASM | CPU_LOG_EXEC;
 
     return true;
 }

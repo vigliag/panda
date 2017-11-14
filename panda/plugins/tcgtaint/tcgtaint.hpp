@@ -2,7 +2,7 @@
 #include "taintengine.hpp"
 
 struct TCGTaintContext {
-    TaintEngine* taint_engine = nullptr;
+    TaintEngine *taint_engine = nullptr;
 };
 
 extern TCGTaintContext tcgtaint_ctx;

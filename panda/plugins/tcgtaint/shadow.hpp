@@ -5,12 +5,12 @@
 #ifndef SRC_QTRACE_TAINT_SHADOW_H_
 #define SRC_QTRACE_TAINT_SHADOW_H_
 
+#include "logging.hpp"
 #include <algorithm>
 #include <memory>
 #include <set>
 #include <string>
 #include <unordered_map>
-#include "logging.hpp"
 
 using target_ulong = uint32_t;
 
@@ -23,59 +23,47 @@ using target_ulong = uint32_t;
 // associated with specific input (or "source") bytes.
 //
 class TaintLocation {
-public:
-  explicit TaintLocation() {}
+  public:
+    explicit TaintLocation() {}
 
-  // Assign (move) two tainted locations
-  void set(const TaintLocation &src) {
-    labels_ = src.labels_;
-  }
+    // Assign (move) two tainted locations
+    void set(const TaintLocation &src) { labels_ = src.labels_; }
 
-  // Combine two tainted locations
-  void combine(const TaintLocation &src) {
-    labels_.insert(src.labels_.begin(), src.labels_.end());
-    if(labels_.size() > 100){
-        WARNING("More than 100 labels combined");
+    // Combine two tainted locations
+    void combine(const TaintLocation &src) {
+        labels_.insert(src.labels_.begin(), src.labels_.end());
+        if (labels_.size() > 100) {
+            WARNING("More than 100 labels combined");
+        }
     }
-  }
 
-  // Copy taint labels to an output set
-  void copy(std::set<int> &out) const {
-    out.insert(labels_.begin(), labels_.end());
-  }
+    // Copy taint labels to an output set
+    void copy(std::set<int> &out) const {
+        out.insert(labels_.begin(), labels_.end());
+    }
 
-  // Add a taint label to this tainted location
-  inline void addLabel(int label) {
-    labels_.insert(label);
-  }
+    // Add a taint label to this tainted location
+    inline void addLabel(int label) { labels_.insert(label); }
 
-  // Check if this location has a specific taint label
-  inline bool hasLabel(int label) const {
-    return labels_.find(label) != labels_.end();
-  }
+    // Check if this location has a specific taint label
+    inline bool hasLabel(int label) const {
+        return labels_.find(label) != labels_.end();
+    }
 
-  // Check if this location is tainted
-  inline bool isTainted() const {
-    return labels_.size() > 0;
-  }
+    // Check if this location is tainted
+    inline bool isTainted() const { return labels_.size() > 0; }
 
-  // Remove all taint labels
-  inline void clear() {
-    labels_.clear();
-  }
+    // Remove all taint labels
+    inline void clear() { labels_.clear(); }
 
-  inline const std::set<int>& getLabels(){
-    return labels_;
-  }
+    inline const std::set<int> &getLabels() { return labels_; }
 
-private:
-  std::set<int> labels_;
+  private:
+    std::set<int> labels_;
 };
 
-
-
-using shadowmemory_t = std::unordered_map<target_ulong,
-    std::shared_ptr<TaintLocation> >;
+using shadowmemory_t =
+    std::unordered_map<target_ulong, std::shared_ptr<TaintLocation>>;
 
 /**
  * @brief The ShadowMemory class is used to represent the taint status for the
@@ -83,133 +71,122 @@ using shadowmemory_t = std::unordered_map<target_ulong,
  * It uses a shadowmemory_t (map of taint locations) as underlying storage
  */
 class ShadowMemory {
-public:
-  explicit ShadowMemory() {}
+  public:
+    explicit ShadowMemory() {}
 
-  // Add a taint label to at the specified memory address
-  void addLabel(target_ulong addr, int label) {
-    if (mem_.find(addr) == mem_.end()) {
-      mem_[addr] = std::shared_ptr<TaintLocation>(new TaintLocation);
+    // Add a taint label to at the specified memory address
+    void addLabel(target_ulong addr, int label) {
+        if (mem_.find(addr) == mem_.end()) {
+            mem_[addr] = std::shared_ptr<TaintLocation>(new TaintLocation);
+        }
+
+        mem_[addr]->addLabel(label);
     }
 
-    mem_[addr]->addLabel(label);
-  }
+    // Taint propagation primitives
+    void set(const TaintLocation *loc, target_ulong addr);
+    void clear(target_ulong addr, unsigned int size = 1);
 
-  // Taint propagation primitives
-  void set(const TaintLocation *loc, target_ulong addr);
-  void clear(target_ulong addr, unsigned int size = 1);
+    // Check if a memory address is tainted
+    inline bool isTaintedAddress(target_ulong addr) const {
+        return mem_.find(addr) != mem_.end() && mem_.at(addr)->isTainted();
+    }
 
-  // Check if a memory address is tainted
-  inline bool isTaintedAddress(target_ulong addr) const {
-    return mem_.find(addr) != mem_.end() && mem_.at(addr)->isTainted();
-  }
+    // Check if a memory address has a taint label
+    inline bool hasLabel(target_ulong addr, int label) const {
+        return mem_.find(addr) != mem_.end() && mem_.at(addr)->hasLabel(label);
+    }
 
-  // Check if a memory address has a taint label
-  inline bool hasLabel(target_ulong addr, int label) const {
-    return mem_.find(addr) != mem_.end() && mem_.at(addr)->hasLabel(label);
-  }
+    void combine(const TaintLocation *loc, target_ulong addr);
 
-  void combine(const TaintLocation *loc, target_ulong addr);
+    // Get the taint status of a (tainted) memory address
+    inline TaintLocation *getTaintLocation(target_ulong addr) const {
+        return mem_.at(addr).get();
+    }
 
-  // Get the taint status of a (tainted) memory address
-  inline TaintLocation* getTaintLocation(target_ulong addr) const {
-    return mem_.at(addr).get();
-  }
-
-private:
-  shadowmemory_t mem_;
+  private:
+    shadowmemory_t mem_;
 };
-
-
 
 /**
  * @brief The ShadowRegister class represents the tainted status of a CPU
  *  register. It is implemented as an array of TaintLocation.
  */
 class ShadowRegister {
-public:
-  // Initialize a tainted register, given its size (in bytes)
-  // CHECK(vigliag) it was previously initialized to target_ulong,
-  // but the tcg target architecture (and tcg temp registers) are 64bit (tcg_target_ulong?)
-  explicit ShadowRegister(unsigned int size = sizeof(uint64_t))
-    : size_(size) {
-    reg_  = new TaintLocation[size];
-  }
-
-  ~ShadowRegister() {
-    delete[] reg_;
-  }
-
-  // Assign a shadow register, copying the taint information from the source to
-  // the destination (this) operand
-  void set(const ShadowRegister &other);
-  void set(const TaintLocation *loc, int offset);
-
-  // Add a taint label
-  inline void set(unsigned int label, unsigned int start = 0,
-                  int size = -1) {
-    if (size == -1) {
-      size = size_;
+  public:
+    // Initialize a tainted register, given its size (in bytes)
+    // CHECK(vigliag) it was previously initialized to target_ulong,
+    // but the tcg target architecture (and tcg temp registers) are 64bit
+    // (tcg_target_ulong?)
+    explicit ShadowRegister(unsigned int size = sizeof(uint64_t))
+        : size_(size) {
+        reg_ = new TaintLocation[size];
     }
 
-    for (unsigned int i = start; i < (start + size); i++) {
-      reg_[i].addLabel(label);
+    ~ShadowRegister() { delete[] reg_; }
+
+    // Assign a shadow register, copying the taint information from the source
+    // to the destination (this) operand
+    void set(const ShadowRegister &other);
+    void set(const TaintLocation *loc, int offset);
+
+    // Add a taint label
+    inline void set(unsigned int label, unsigned int start = 0, int size = -1) {
+        if (size == -1) {
+            size = size_;
+        }
+
+        for (unsigned int i = start; i < (start + size); i++) {
+            reg_[i].addLabel(label);
+        }
     }
-  }
 
-  // Copy taint information
-  inline void set(const TaintLocation* loc, unsigned int offset = 0) {
-    reg_[offset].set(*loc);
-  }
-
-  // Clear taint information
-  void clear(unsigned int offset = 0, int size = -1) {
-    if (size == -1) {
-      size = size_ - offset;
+    // Copy taint information
+    inline void set(const TaintLocation *loc, unsigned int offset = 0) {
+        reg_[offset].set(*loc);
     }
 
-    for (unsigned int i = offset; i < (offset + size); i++) {
-      reg_[i].clear();
+    // Clear taint information
+    void clear(unsigned int offset = 0, int size = -1) {
+        if (size == -1) {
+            size = size_ - offset;
+        }
+
+        for (unsigned int i = offset; i < (offset + size); i++) {
+            reg_[i].clear();
+        }
     }
-  }
 
-  // Combine taint information from the source and the destination (this)
-  // operand
-  void combine(const ShadowRegister &other);
-  void combine(const TaintLocation *loc, int offset);
+    // Combine taint information from the source and the destination (this)
+    // operand
+    void combine(const ShadowRegister &other);
+    void combine(const TaintLocation *loc, int offset);
 
-  // Get the size of this register
-  inline unsigned getSize() const {
-    return (unsigned) size_;
-  }
+    // Get the size of this register
+    inline unsigned getSize() const { return (unsigned)size_; }
 
-  // Check if this register is tainted
-  bool isTainted() const;
-  bool isTaintedByte(unsigned int offset) const;
+    // Check if this register is tainted
+    bool isTainted() const;
+    bool isTaintedByte(unsigned int offset) const;
 
-  // Get the taint status of a (tainted) CPU register
-  inline TaintLocation* getTaintLocation(unsigned int offset)
-    const {
-    return &reg_[offset];
-  }
+    // Get the taint status of a (tainted) CPU register
+    inline TaintLocation *getTaintLocation(unsigned int offset) const {
+        return &reg_[offset];
+    }
 
-  // Check if this shadow register has the specified taint label
-  bool hasLabel(int label) const;
+    // Check if this shadow register has the specified taint label
+    bool hasLabel(int label) const;
 
-  // Set register name
-  void setName(const std::string newname) {
-    name_ = newname;
-  }
+    // Set register name
+    void setName(const std::string newname) { name_ = newname; }
 
-  // Get register name
-  const std::string getName() const {
-    return name_;
-  }
+    // Get register name
+    const std::string getName() const { return name_; }
 
-private:
-  int size_;
-  TaintLocation *reg_;
-  std::string name_;
+  private:
+    int size_;
+    TaintLocation *reg_;
+    std::string name_;
 };
 
-#endif  // SRC_QTRACE_TAINT_SHADOW_H_
+#endif // SRC_QTRACE_TAINT_SHADOW_H_
