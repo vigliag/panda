@@ -45,7 +45,7 @@ struct CallInfo {
     uint64_t instruction_count_ret;
     int writes = 0;
     int reads = 0;
-    uint64_t called_by = 0; //TODO
+    uint64_t called_by = 0;
 };
 
 /* Data structures */
@@ -53,13 +53,12 @@ static std::set<Asid> tracked_asids;
 static std::map<Funid, int> n_calls;
 static std::unordered_map<Callid, CallInfo> call_infos;
 
-// Gets the current stack entry from callstack_instr
+const int calls_to_monitor_per_fn_entrypoint = 5;
+
+// Gets the current (topmost) stack entry from callstack_instr
 CallstackStackEntry getCurrentEntry(CPUState *cpu){
     CallstackStackEntry entry = {};
-    int entries_n = get_call_entries(&entry, 1,cpu);
-    if(!entries_n){
-        std::cerr << "WARNING, no call entry for current cpu" << std::endl;
-    }
+    get_call_entries(&entry, 1,cpu);
     return entry;
 }
 
@@ -73,20 +72,27 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         return;
     }
 
+    // Get the two latest entries on the current stack.
+    // The topmost will be this call
+
+    CallstackStackEntry entries[2] = {};
+    get_call_entries(entries, 2,cpu);
+
+    const CallstackStackEntry& current_entry = entries[0];
+    const CallstackStackEntry& previous_entry = entries[1];
+
+    assert(current_entry.call_id);
+
+
+    // Count the number of calls with this asid we've seen
     Funid fnid = make_pair(asid, entrypoint);
-    const CallstackStackEntry current_entry = getCurrentEntry(cpu);
-
-    if (!current_entry.call_id){
-        return;
-    }
-
     n_calls[fnid]++;
-    if(n_calls[fnid] < 6) {
+    if(n_calls[fnid] <= calls_to_monitor_per_fn_entrypoint) {
         // create a call_info for this call
         // successive memory callbacks will populate its writeset and readset
         call_infos[callid].asid = asid;
         call_infos[callid].program_counter = entrypoint;
-        call_infos[callid].called_by = current_entry.call_id;
+        call_infos[callid].called_by = previous_entry.call_id;
     }
 }
 
@@ -102,12 +108,11 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     }
 
     CallstackStackEntry entry = getCurrentEntry(cpu);
-
     if (!entry.call_id){
         return 0;
     }
 
-    if( call_infos.count(entry.call_id)){
+    if(call_infos.count(entry.call_id)){
         for(target_ulong i=0; i < size; i++){
             call_infos[entry.call_id].writes++;
             call_infos[entry.call_id].writeset[addr +i] = data[i];
@@ -129,7 +134,6 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     }
 
     CallstackStackEntry entry = getCurrentEntry(cpu);
-    
     if (!entry.call_id){
         return 0;
     }
@@ -227,7 +231,8 @@ void on_ret(CPUState *cpu, target_ulong entrypoint, uint64_t callid, uint32_t sk
     std::vector<bufferinfo> writebuffs = toBufferInfos(call.writeset);
     std::vector<bufferinfo> readbuffs = toBufferInfos(call.readset);
 
-    std::cout << "RET " << call.asid << ":"<< call.program_counter;
+    std::cout << "RET " << callid << " ";
+    std::cout << call.asid << ":"<< call.program_counter;
 
     std::cout << " writes=";
     for(const bufferinfo& wrb : writebuffs){
@@ -338,7 +343,8 @@ bool init_plugin(void *self) {
     return true;
 }
 
-/** Logs to the standard out the calls that haven't returned */
+/** Logs to the standard out the calls that haven't returned.
+ * Note these calls haven't been logged */
 void printstats(){
     std::cerr << "Missed calls: " << std::endl;
     for(auto const& callid_call : call_infos){

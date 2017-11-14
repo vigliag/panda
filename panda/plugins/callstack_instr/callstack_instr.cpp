@@ -312,17 +312,36 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     std::vector<stack_entry> &v = callstacks[current_stackid];
     if (v.empty()) return 1;
 
-    // In case we missed some return, we check until depth 10 in our shadow 
-    // stack
-    for (int i = v.size()-1; i > ((int)(v.size()-10)) && i >= 0; i--) {
-        if (pc == v[i].return_address) {
-            PPP_RUN_CB(on_ret2, cpu, v[i].function, v[i].call_id, v.size() -i -1);
-            PPP_RUN_CB(on_ret, cpu, v[i].function);
+    // search the shadow stack top-to-bottom order, for a max depth of 20
 
-            v.erase(v.begin()+i, v.end());
-            break;
-        }
+    const int max_depth = 30;
+    bool found = false;
+
+    auto stack_it = v.rbegin();
+    unsigned depth = 0;
+    for(; stack_it != v.rend() && depth < max_depth; stack_it++, depth++){
+        if(stack_it->return_address == pc) {found = true; break;}
     }
+
+    if(!found){
+        // Not a return!
+        return 0;
+    }
+
+    PPP_RUN_CB(on_ret2, cpu, stack_it->function, stack_it->call_id, depth);
+    PPP_RUN_CB(on_ret, cpu, stack_it->function);
+
+    // remove stack frames in between from the shadow stack
+
+    //obtain forward iterator
+    std::advance(stack_it, 1);
+    auto found_element_it = stack_it.base();
+
+    //for(auto it = found_element_it; it != v.end(); it++){
+        // call on_discarded function
+    //}
+
+    v.erase(found_element_it, v.end());
 
     return 0;
 }
@@ -379,7 +398,7 @@ int get_callers(target_ulong callers[], int n, CPUState* cpu) {
 
 /**
  * @brief get_call_entries gets you the topmost n entries from the shadow stack
- *        in reversed order (topmost first)
+ *   (current asid and thread, if possible) in reversed order (topmost first)
  * @param entries, out array of entries with at least n positions
  * @param n, max number of entries to return
  * @param cpu, cpu

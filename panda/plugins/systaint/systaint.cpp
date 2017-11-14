@@ -474,8 +474,8 @@ void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         auto thread = getFQThreadId(cpu);
         auto p_current_event = events.getEvent(thread);
 
-        if(p_current_event){
-            cerr << "encoding call during existing event. This shouldn't happen. "
+        if(p_current_event && p_current_event->kind == EventKind::syscall){
+            cerr << "encoding call during a syscall. This shouldn't happen. "
                  << entrypoint << " " << callid << " -- " << p_current_event->toString() << endl;
             return;
         }
