@@ -111,7 +111,7 @@ void notify_taint_clearM(target_ulong addr, int size) {
 void notify_taint_endtb() { tcgtaint_ctx.taint_engine->clearTempRegisters(); }
 
 void notify_taint_regalloc(target_ulong reg, const char *name) {
-    printf("REGALLOC %d %s", reg, name);
+    printf("REGALLOC " TARGET_FMT_lu " %s", reg, name);
     if (reg >= 16) {
         printf(" ignoring segment register");
     } else {

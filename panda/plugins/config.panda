@@ -17,7 +17,7 @@ wintrospection
 asid_instr_count
 replaymovie
 memsavep
+tcgtaint
 fn_memlogger
 sysevent
 sysrecstarter
-tcgtaint

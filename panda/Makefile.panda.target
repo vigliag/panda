@@ -139,10 +139,10 @@ clean-panda:
 		rm -f panda/panda_*.so;\
 	fi
 
-#ifdef CONFIG_QTRACE_TAINT
+ifdef CONFIG_QTRACE_TAINT
 obj-y += panda/tcg-taint/helpers.o
 obj-y += panda/tcg-taint/tcg-taint.o
-#endif
+endif
 
 ifdef CONFIG_LLVM
 #########################################################

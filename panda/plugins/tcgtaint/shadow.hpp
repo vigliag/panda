@@ -12,7 +12,9 @@
 #include <string>
 #include <unordered_map>
 
-using target_ulong = uint32_t;
+// TODO(vigliag) is it worth including panda/plugin.h 
+// in here in order to get target_ulong?
+#include "panda/plugin.h"
 
 //
 // An instance of the TaintLocation class represents a tainted memory location
