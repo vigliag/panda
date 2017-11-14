@@ -1,6 +1,5 @@
 #pragma once
 #include <stdint.h>
-#define target_ulong uint32_t
 
 /* Allocation of CPU registers */
 typedef void (*notify_taint_regalloc_t)(target_ulong reg, const char *name);

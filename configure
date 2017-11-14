@@ -190,7 +190,7 @@ debug_info="yes"
 stack_protector=""
 llvm="no"
 llvmver="3.3"
-tcgtint="no"
+tcgtaint="no"
 
 # Don't accept a target_list environment variable.
 unset target_list
