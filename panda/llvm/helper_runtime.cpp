@@ -150,8 +150,9 @@ void PandaHelperCallVisitor::visitCallInst(CallInst &I) {
 }
 
 } // namespace llvm
+
+// resolved full path to the current executable
 extern const char *qemu_file;
-extern const char **gargv;
 
 /*
  * Start the process of including the execution of QEMU helper functions in the

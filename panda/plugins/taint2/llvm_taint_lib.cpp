@@ -59,7 +59,7 @@ PPP_CB_BOILERPLATE(on_ptr_store);
 
 }
 
-extern char **gargv;
+extern const char *qemu_file;
 
 // Helper methods for doing structure computations.
 #define cpu_off(member) (uint64_t)(&((CPUArchState *)0)->member)

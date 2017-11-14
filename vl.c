@@ -3035,14 +3035,20 @@ static int qemu_read_default_config_file(void)
 }
 
 // Panda stuff
+
+/** Obtains the full path to the current executable */
 static char* this_executable_path(const char* argv0){
-    char buf[1024] = {0};
+    char buf[PATH_MAX] = {0};
+
+    // readlink method, linux only
+    // should fail at runtime on other posix-compatible systems
     ssize_t size = readlink("/proc/self/exe", buf, sizeof(buf));
-    if (size == -1 || size == 0 || size == sizeof(buf)) {
-        //fallback
-        return realpath(argv0, NULL);
+    if (size > 0 && size < sizeof(buf)) {
+        return strdup(buf);
     }
-    return strdup(buf);
+
+    // fallback method (only works when the executable is run directly)
+    return realpath(argv0, NULL);
 }
 
 int main(int argc, char **argv, char **envp)
@@ -4954,6 +4960,8 @@ int main(int argc, char **argv, char **envp)
         tcg_llvm_cleanup();
     }
 #endif
+
+    free((void*)qemu_file);
 
     return 0;
 }
