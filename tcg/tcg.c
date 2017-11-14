@@ -523,6 +523,9 @@ TCGv_i64 tcg_global_reg_new_i64(TCGReg reg, const char *name)
     return MAKE_TCGV_I64(idx);
 }
 
+#ifdef CONFIG_QTRACE_TAINT
+#include "tcg-taint/callbacks.h"
+#endif
 int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
                                 intptr_t offset, const char *name)
 {
@@ -532,6 +535,18 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
     int indirect_reg = 0, bigendian = 0;
 #ifdef HOST_WORDS_BIGENDIAN
     bigendian = 1;
+#endif
+
+#ifdef CONFIG_QTRACE_TAINT
+    /* Qtrace has no support for 64-bit registers, but this should be not a problem as
+       TCG simply splits them in two 32-bit parts [vigliag: the global ones, at least,
+       64 bit temps seems to be used]
+
+       NOTE(vigliag) previous qtrace assertion `assert(type != TCG_TYPE_I64);` was removed
+       it was failing because of the new intel MPX registers such as bnd0_lb.
+    */
+    if(qtrace_taint_instrumentation_enabled)
+        notify_taint_regalloc(s->nb_globals, name);
 #endif
 
     if (!base_ts->fixed_reg) {

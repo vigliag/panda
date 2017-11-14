@@ -26,6 +26,16 @@
 #include "exec/helper-proto.h"
 #include "exec/helper-gen.h"
 
+#ifdef CONFIG_QTRACE_TAINT
+static inline void tcg_gen_qtrace_mov(TCGv_i32 ret, TCGv_i32 arg);
+static inline void tcg_gen_qtrace_clearR(TCGv_i32 ret);
+static inline void tcg_gen_qtrace_combine3(TCGOpcode opc, TCGv_i32 ret,
+                                           TCGv_i32 arg1, TCGv_i32 arg2);
+static inline void tcg_gen_qtrace_deposit(TCGv_i32 ret, TCGv_i32 arg1,
+                                          TCGv_i32 arg, unsigned int ofs,
+                                          unsigned int len);
+#endif
+
 /* Basic output routines.  Not for general consumption.  */
 
 void tcg_gen_op1(TCGContext *, TCGOpcode, TCGArg);
@@ -328,18 +338,28 @@ void tcg_gen_bswap32_i32(TCGv_i32 ret, TCGv_i32 arg);
 
 static inline void tcg_gen_discard_i32(TCGv_i32 arg)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_clearR(arg);
+#endif
     tcg_gen_op1_i32(INDEX_op_discard, arg);
 }
 
 static inline void tcg_gen_mov_i32(TCGv_i32 ret, TCGv_i32 arg)
 {
     if (!TCGV_EQUAL_I32(ret, arg)) {
+#ifdef CONFIG_QTRACE_TAINT
+        tcg_gen_qtrace_mov(ret, arg);
+#endif
         tcg_gen_op2_i32(INDEX_op_mov_i32, ret, arg);
     }
+
 }
 
 static inline void tcg_gen_movi_i32(TCGv_i32 ret, int32_t arg)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_clearR(ret);
+#endif
     tcg_gen_op2i_i32(INDEX_op_movi_i32, ret, arg);
 }
 
@@ -393,16 +413,25 @@ static inline void tcg_gen_st_i32(TCGv_i32 arg1, TCGv_ptr arg2,
 
 static inline void tcg_gen_add_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_add_i32, ret, arg1, arg2);
+#endif
     tcg_gen_op3_i32(INDEX_op_add_i32, ret, arg1, arg2);
 }
 
 static inline void tcg_gen_sub_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_sub_i32, ret, arg1, arg2);
+#endif
     tcg_gen_op3_i32(INDEX_op_sub_i32, ret, arg1, arg2);
 }
 
 static inline void tcg_gen_and_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_and_i32, ret, arg1, arg2);
+#endif
     tcg_gen_op3_i32(INDEX_op_and_i32, ret, arg1, arg2);
 }
 
@@ -519,6 +548,10 @@ void tcg_gen_bswap16_i64(TCGv_i64 ret, TCGv_i64 arg);
 void tcg_gen_bswap32_i64(TCGv_i64 ret, TCGv_i64 arg);
 void tcg_gen_bswap64_i64(TCGv_i64 ret, TCGv_i64 arg);
 
+#ifdef CONFIG_QTRACE_TAINT
+#include "tcg-taint/tcg-op.h"
+#endif
+
 #if TCG_TARGET_REG_BITS == 64
 static inline void tcg_gen_discard_i64(TCGv_i64 arg)
 {
@@ -576,6 +609,15 @@ static inline void tcg_gen_ld32s_i64(TCGv_i64 ret, TCGv_ptr arg2,
 static inline void tcg_gen_ld_i64(TCGv_i64 ret, TCGv_ptr arg2,
                                   tcg_target_long offset)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    if(qtrace_taint_instrumentation_enabled &&
+            qtrace_tcg_is_generating_sse){
+        //arg1 is a normal temp register
+        //arg2 is a pointer to env
+        //offset is the offset from env to the point in the register
+        tcg_gen_qtrace_qemu_micro_ld(ret, arg2, offset, 64);
+    }
+#endif
     tcg_gen_ldst_op_i64(INDEX_op_ld_i64, ret, arg2, offset);
 }
 
@@ -600,6 +642,15 @@ static inline void tcg_gen_st32_i64(TCGv_i64 arg1, TCGv_ptr arg2,
 static inline void tcg_gen_st_i64(TCGv_i64 arg1, TCGv_ptr arg2,
                                   tcg_target_long offset)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    if(qtrace_taint_instrumentation_enabled &&
+            qtrace_tcg_is_generating_sse){
+        //arg1 is a normal temp register
+        //arg2 is a pointer to env
+        //offset is the offset from env to the point in the register
+        tcg_gen_qtrace_qemu_micro_st(arg1, arg2, offset, 64);
+    }
+#endif
     tcg_gen_ldst_op_i64(INDEX_op_st_i64, arg1, arg2, offset);
 }
 
@@ -778,6 +829,9 @@ static inline void tcg_gen_insn_start(target_ulong pc, target_ulong a1,
 
 static inline void tcg_gen_exit_tb(uintptr_t val)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_endtb();
+#endif
     tcg_gen_op1i(INDEX_op_exit_tb, val);
 }
 
@@ -824,6 +878,12 @@ void tcg_gen_qemu_ld_i32(TCGv_i32, TCGv, TCGArg, TCGMemOp);
 void tcg_gen_qemu_st_i32(TCGv_i32, TCGv, TCGArg, TCGMemOp);
 void tcg_gen_qemu_ld_i64(TCGv_i64, TCGv, TCGArg, TCGMemOp);
 void tcg_gen_qemu_st_i64(TCGv_i64, TCGv, TCGArg, TCGMemOp);
+
+#ifdef CONFIG_QTRACE_TAINT
+//NOTE(vigliag) tcg_gen_qtrace_qemu_ld helpers were previously generated
+//in the following functions. I moved them to tcg_gen_qemu_ld_i32 to add
+//support for `rep mov`
+#endif
 
 static inline void tcg_gen_qemu_ld8u(TCGv ret, TCGv addr, int mem_index)
 {

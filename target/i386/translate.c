@@ -4606,9 +4606,24 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                 } else {
                     opreg = rm;
                 }
+#ifdef CONFIG_QTRACE_TAINT
+                /* Check for SUB/SBB operations involving the same register as
+                   source and destination; in these situations, taint status
+                   must be clear.
+
+                   We cannot process this case in the TCG, as the translator is
+                   going to move the source and destinations (that in this case
+                   are identical) into *different* temporary registers, thus we
+                   won't be able to realize their are actually the same
+                   register. */
+                if (reg == opreg && (op == OP_SBBL || op == OP_SUBL)) {
+                    tcg_gen_qtrace_clearR(cpu_regs[reg]);
+                }
+#endif
                 gen_op_mov_v_reg(ot, cpu_T1, reg);
                 gen_op(s, op, ot, opreg);
                 break;
+
             case 1: /* OP Gv, Ev */
                 modrm = cpu_ldub_code(env, s->pc++);
                 mod = (modrm >> 6) & 3;
@@ -8237,7 +8252,13 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
     case 0x1c2:
     case 0x1c4 ... 0x1c6:
     case 0x1d0 ... 0x1fe:
+#ifdef CONFIG_QTRACE_TAINT
+        qtrace_tcg_is_generating_sse = true;
+#endif
         gen_sse(env, s, b, pc_start, rex_r);
+#ifdef CONFIG_QTRACE_TAINT
+        qtrace_tcg_is_generating_sse = false;
+#endif
         break;
     default:
         goto unknown_op;

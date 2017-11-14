@@ -190,6 +190,7 @@ debug_info="yes"
 stack_protector=""
 llvm="no"
 llvmver="3.3"
+tcgtint="no"
 
 # Don't accept a target_list environment variable.
 unset target_list
@@ -937,6 +938,8 @@ for opt do
   ;;
   --with-llvm=*) llvmdir="$optarg"
   ;;
+  --enable-tcgtaint) tcgtaint="yes"
+  ;;
   --disable-kvm) kvm="no"
   ;;
   --enable-kvm) kvm="yes"
@@ -1355,8 +1358,10 @@ Advanced options (experts only):
   --with-win-sdk=SDK-path  path to Windows Platform SDK (to build VSS .tlb)
   --tls-priority           default TLS protocol/cipher priority string
 
-  --enable-llvm            enable LLVM support (for all targets)"
-  --with-llvm=PATH         LLVM path (PATH/bin/llvm-config must exist)"
+  --enable-llvm            enable LLVM support (for all targets)
+  --with-llvm=PATH         LLVM path (PATH/bin/llvm-config must exist)
+  --enable-tcgtaint        enable TCGtaint support
+  "
 
 Optional features, enabled with --enable-FEATURE and
 disabled with --disable-FEATURE, default is enabled if available:
@@ -5193,6 +5198,7 @@ echo "KVM support       $kvm"
 echo "HAX support       $hax"
 echo "RDMA support      $rdma"
 echo "LLVM support      $llvm"
+echo "TCGTAINT support  $tcgtaint"
 echo "TCG interpreter   $tcg_interpreter"
 echo "fdt support       $fdt"
 echo "preadv support    $preadv"
@@ -5584,6 +5590,10 @@ if test "$llvm" = "yes" ; then
   echo "CONFIG_LLVM=y" >> $config_host_mak
   echo "LLVM_CXXFLAGS=\$(filter-out $FILTERFLAGS,$llvm_cxxflags)" >> $config_host_mak
   echo "LLVMDIR=$llvmdir" >> $config_host_mak
+fi
+
+if test "$tcgtaint" = "yes" ; then
+  echo "CONFIG_QTRACE_TAINT=y" >> $config_host_mak
 fi
 
 if test "$xen" = "yes" ; then

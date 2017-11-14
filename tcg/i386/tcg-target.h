@@ -78,6 +78,15 @@ typedef enum {
 extern bool have_bmi1;
 extern bool have_popcnt;
 
+#ifdef CONFIG_QTRACE_TAINT
+/* NOTE(vigliag) disabling some features of the tcg_target, so we don't have
+ * to deal with them in taint module
+ */
+#define enabled_unless_taint      0
+#else
+#define enabled_unless_taint      1
+#endif
+
 /* optional instructions */
 #define TCG_TARGET_HAS_div2_i32         1
 #define TCG_TARGET_HAS_rot_i32          1
@@ -100,7 +109,7 @@ extern bool have_popcnt;
 #define TCG_TARGET_HAS_deposit_i32      1
 #define TCG_TARGET_HAS_extract_i32      1
 #define TCG_TARGET_HAS_sextract_i32     1
-#define TCG_TARGET_HAS_movcond_i32      1
+#define TCG_TARGET_HAS_movcond_i32      enabled_unless_taint
 #define TCG_TARGET_HAS_add2_i32         1
 #define TCG_TARGET_HAS_sub2_i32         1
 #define TCG_TARGET_HAS_mulu2_i32        1
@@ -135,7 +144,7 @@ extern bool have_popcnt;
 #define TCG_TARGET_HAS_deposit_i64      1
 #define TCG_TARGET_HAS_extract_i64      1
 #define TCG_TARGET_HAS_sextract_i64     0
-#define TCG_TARGET_HAS_movcond_i64      1
+#define TCG_TARGET_HAS_movcond_i64      enabled_unless_taint
 #define TCG_TARGET_HAS_add2_i64         1
 #define TCG_TARGET_HAS_sub2_i64         1
 #define TCG_TARGET_HAS_mulu2_i64        1
