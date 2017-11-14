@@ -701,7 +701,7 @@ static void detect_infinite_loops(void) {
     static unsigned loop_tries = 0;
     if (last_instr_count == rr_get_guest_instr_count()) {
         loop_tries++;
-        if (loop_tries > 1500) {
+        if (loop_tries > 20) {
             assert(false);
         }
     } else {
