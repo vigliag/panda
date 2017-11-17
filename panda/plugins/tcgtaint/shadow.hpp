@@ -185,6 +185,15 @@ class ShadowRegister {
     // Get register name
     const std::string getName() const { return name_; }
 
+    // Gets the first label at the first byte (useful for debugging purposes)
+    int firstLabel() const{
+        if(!reg_[0].isTainted())
+            return 0;
+        else{
+            return *reg_[0].getLabels().begin();
+        }
+    }
+
   private:
     int size_;
     TaintLocation *reg_;

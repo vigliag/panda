@@ -89,16 +89,20 @@ public:
 
     void closeEvent(const FQThreadId &thread_id, Event &event) {
       auto &events = curr_events[thread_id];
+
       // remove all events above the current one from the event stack
-      // TODO those events should be logged, not discarded
       auto closing_evnt_it = std::find_if(
           events.begin(), events.end(), [&event](const shared_ptr<Event> &cev) {
             return cev->getLabel() == event.getLabel();
           });
 
-      for(auto it = closing_evnt_it; it != events.end(); it++){
+      // log all other events in between
+      auto it = closing_evnt_it;
+      it++; //skip current (already logged)
+      for(; it != events.end(); it++){
           logEvent(**it, outfp);
       }
+
       events.erase(closing_evnt_it, events.end());
     }
 };
@@ -127,7 +131,7 @@ static bool only_taint_syscall_args = false;
 static bool use_candidate_pointers = false;
 static bool no_syscalls = false;
 static const bool defer_tainting_writes_to_end_of_the_block = false;
-static bool debug_logs = false;
+static bool debug_logs = true;
 static bool disable_taint_on_other_processes = false;
 
 static uint64_t target_end_count = 0;
@@ -191,7 +195,7 @@ static int readLabels(CPUState* cpu, Address addr, target_ulong size, std::funct
         tcgtaint_physical_memory_labels_copy(abs_addr_i, labels.data());
 
         if(debug_logs){
-            fprintf(stderr, "READLABEL %u / %d at %d (%p) \n", labels[0], nlabels, addr +i, (void*)abs_addr_i);
+            fprintf(stderr, "READLABEL lbl=%u / %d at %d (%p) \n", labels[0], nlabels, addr +i, (void*)abs_addr_i);
         }
 
         for(uint32_t label : labels){
@@ -333,7 +337,7 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
         return;
     }
 
-    cout << "Tainting syscall args with " << taint_label << endl ;
+    cout << "Tainting syscall args with lbl=" << taint_label << endl ;
     writeLabelPA(arg_start_pa, arg_len, taint_label, LABEL_ADDITIVE);
 
 }
@@ -541,7 +545,16 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                        target_ulong size, void *buf) {
     (void) pc;
     if(debug_logs){
-        cerr << "WRITE at " << addr << " size=" << size << endl;
+        uint8_t* data =  reinterpret_cast<uint8_t*>(buf);
+        hwaddr physical_address = panda_virt_to_phys(cpu, addr);
+        uint8_t printable0 = isprint(data[0]) ? data[0] : '_';
+        uint8_t printable1 = size > 1 && isprint(data[1]) ? data[1] : '_';
+        cerr << "WRITE " << rr_get_guest_instr_count()
+             << " " << addr
+             <<" (" << std::hex << physical_address << std::dec << ") "
+             <<" size=" << size
+             <<" byte=" << printable0 << printable1
+             << endl;
     }
 
     uint8_t* data = reinterpret_cast<uint8_t*>(buf);
@@ -833,6 +846,9 @@ bool init_plugin(void *self) {
             std::cout << "Please pass an 'outfile' parameter, or enable pandalog" << std::endl;
             return false;
         }
+
+        debug_logs = panda_parse_bool_opt(args, "debug", "log additional debugging info");
+        cout << "debug " << debug_logs << endl;
     }
 
     if(outfile){

@@ -22,7 +22,7 @@ PANDAENDCOMMENT */
 
 TCGTaintContext tcgtaint_ctx;
 bool taint_is_user_enabled = false;
-bool taint_in_kernel_space = false;
+bool taint_in_kernel_space = true;
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
