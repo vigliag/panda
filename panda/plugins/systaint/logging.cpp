@@ -1,8 +1,6 @@
 #include "panda/cheaders.h"
 
-extern "C" {
-#include "panda/plog.h"
-}
+#include "panda/plog-cc.hpp"
 
 #include "logging.hpp"
 #include <vector>
@@ -101,15 +99,16 @@ setmap_to_vectormap(const std::map<uint32_t, std::set<uint32_t>>& setmap){
 
 void logEvent(const Event& event, FILE* filepointer){
 
-    Panda__SysFnCall pbEvent= PANDA__SYS_FN_CALL__INIT;
-    pbEvent.started = event.started;
-    pbEvent.entrypoint = event.entrypoint;
-    pbEvent.ended = event.ended;
-    pbEvent.kind = static_cast<uint32_t>(event.kind);
-    pbEvent.parent = event.parent;
-    pbEvent.pid = event.thread.first;
-    pbEvent.thread = event.thread.second;
-    pbEvent.label = event.getLabel();
+    panda::SysFnCall *pbEvent = new panda::SysFnCall;
+
+    pbEvent->set_started(event.started);
+    pbEvent->set_entrypoint(event.entrypoint);
+    pbEvent->set_ended(event.ended);
+    pbEvent->set_kind(static_cast<uint32_t>(event.kind));
+    pbEvent->set_parent(event.parent);
+    pbEvent->set_pid(event.thread.first);
+    pbEvent->set_thread(event.thread.second);
+    pbEvent->set_label(event.getLabel());
 
     //Turn depsets to arrays, so we can pass them to protobuf directly
     std::unordered_map<uint32_t, std::vector<uint32_t>> depsetAry = setmap_to_vectormap(event.memory.readsetDeps);
@@ -117,94 +116,59 @@ void logEvent(const Event& event, FILE* filepointer){
     std::vector<BufferInfo> readBuffers = toBufferInfos(event.memory.readset, &event.memory.readsetDeps);
     std::vector<BufferInfo> writeBuffers = toBufferInfos(event.memory.writeset);
 
-    //std::vector<uint32_t> tags(event.tags.begin(), event.tags.end());
     const std::vector<uint32_t> &tags = event.tags;
 
     //Create the array of pointers to reads
-    Panda__SysMemoryLocation *reads = new Panda__SysMemoryLocation[readBuffers.size()];
-    Panda__SysMemoryLocation **readPtrs = new Panda__SysMemoryLocation*[readBuffers.size()];
+    //panda::SysMemoryLocation *reads = new panda::SysMemoryLocation[readBuffers.size()];
+    //panda::SysMemoryLocation **readPtrs = new panda::SysMemoryLocation*[readBuffers.size()];
 
-    size_t i = 0;
     for(const auto& buffer : readBuffers){
         const auto& addr = buffer.base;
 
-        reads[i] = PANDA__SYS_MEMORY_LOCATION__INIT;
-        reads[i].n_dependencies = depsetAry[addr].size();
-        reads[i].dependencies = &(depsetAry[addr][0]);
+        panda::SysMemoryLocation *read = pbEvent->add_reads();
 
-        ProtobufCBinaryData pcbd;
-        pcbd.data = const_cast<uint8_t*>(buffer.data.data());
-        pcbd.len = buffer.data.size();
-        assert(pcbd.len == 0 || pcbd.data != nullptr);
+        for(const auto& dependency: depsetAry[addr]){
+            read->add_dependencies(dependency);
+        }
 
-        reads[i].value = pcbd;
-        reads[i].address = buffer.base;
-        reads[i].argno = 0;
-
-        readPtrs[i] = &reads[i];
-        i++;
+        read->set_value(buffer.data.data(), buffer.data.size());
+        read->set_address(addr);
+        read->set_argno(0);
     }
 
-    pbEvent.n_tags = tags.size();
-    pbEvent.tags = const_cast<uint32_t*>(tags.data());
+    for(const auto& tag : tags){
+        pbEvent->add_tags(tag);
+    }
 
-    pbEvent.n_reads = i;
-    pbEvent.reads = readPtrs;
+    for(const auto& call: event.callstack){
+        pbEvent->add_callstack(call);
+    }
 
-    pbEvent.n_callstack = event.callstack.size();
-    pbEvent.callstack = const_cast<uint32_t*>(event.callstack.data());
-
-    // Same for writes
-    Panda__SysMemoryLocation *writes = new Panda__SysMemoryLocation[writeBuffers.size()];
-    Panda__SysMemoryLocation **writePtrs = new Panda__SysMemoryLocation*[writeBuffers.size()];
-
-    i= 0;
     for(const auto& buffer : writeBuffers){
-        writes[i] = PANDA__SYS_MEMORY_LOCATION__INIT;
-        writes[i].n_dependencies = 0;
-        writes[i].dependencies = nullptr;
+        const auto& addr = buffer.base;
 
-        ProtobufCBinaryData pcbd;
-        pcbd.data = const_cast<uint8_t*>(buffer.data.data());
-        pcbd.len = buffer.data.size();
-        assert(pcbd.len == 0 || pcbd.data != nullptr);
+        panda::SysMemoryLocation *write = pbEvent->add_writes();
 
-        writes[i].value = pcbd;
-        writes[i].address = buffer.base;
-        writePtrs[i] = &writes[i];
-
-        i++;
+        write->set_value(buffer.data.data(), buffer.data.size());
+        write->set_address(addr);
+        write->set_argno(0);
     }
-    pbEvent.n_writes = i;
-    pbEvent.writes = writePtrs;
 
     // Write entry either to pandalog or to file
     if(filepointer == 0 && pandalog){
         // Use pandalog
-        Panda__LogEntry ple = PANDA__LOG_ENTRY__INIT;
-        ple.encfncall = &pbEvent;
-        pandalog_write_entry(&ple);
+        PandaLog p;
+
+        std::unique_ptr<panda::LogEntry> ple(new panda::LogEntry);
+        ple->set_allocated_encfncall(pbEvent);
+        p.write_entry(std::move(ple));
 
     } else {
         assert(filepointer);
-
-        // Write to filepointer, prepended by the buffer's size
-        uint64_t buffer_size = panda__sys_fn_call__get_packed_size(&pbEvent);
-        uint8_t* buffer = new uint8_t[buffer_size+1];
-
-        panda__sys_fn_call__pack(&pbEvent, buffer);
-
-        fwrite(&buffer_size, sizeof(buffer_size), 1, filepointer);
-        fwrite(buffer, buffer_size, 1, filepointer);
-        fflush(filepointer);
-
-        delete[] buffer;
+        pbEvent->SerializeToFileDescriptor(fileno(filepointer));
     }
 
-    delete[] reads;
-    delete[] readPtrs;
-    delete[] writes;
-    delete[] writePtrs;
+    delete(pbEvent);
 
     fprintf(stderr, "Logged %s \n", event.toString().c_str());
 }
