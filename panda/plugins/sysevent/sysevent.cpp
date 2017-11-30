@@ -45,7 +45,10 @@ struct ProcessData {
 // Arguments
 static bool start_recording;
 static bool record_pids;
-static std::ofstream outfp;
+static bool log_events;
+
+static std::ofstream pids_outfp;
+static std::ofstream events_outfp;
 
 // Data structures
 static std::map<target_ulong, ProcessData> pids;
@@ -102,27 +105,46 @@ static void on_enter_extra(CPUState *cpu, uint32_t eventid){
 void hypercall_event_listener(CPUState *cpu){
     CPUArchState *env = (CPUArchState*)cpu->env_ptr;
 
-    if(env->regs[R_EAX] != SYSTAINT_MAGIC)
+    if(!(env->regs[R_EAX] == SYSTAINT_MAGIC || env->regs[R_EAX] == 0x42424242))
         return;
 
     //printf("HYPERCALL " TARGET_FMT_ld " " TARGET_FMT_ld " " TARGET_FMT_ld "\n",
     //     env->regs[R_EBX], env->regs[R_ECX], env->regs[R_EDX]);
 
     uint32_t cuckoo_event = env->regs[R_ECX];
+    const char* etype = nullptr;
 
     switch (env->regs[R_EBX]) {
         case HYPERCALL_SYSCALL_ENTER:
             //printf("SYSEVENT enter: %" PRIu32 " \n", cuckoo_event);
+            etype = "enter";
             on_enter_extra(cpu, cuckoo_event);
             PPP_RUN_CB(on_sysevent_enter, cpu, cuckoo_event);
         break;
         case HYPERCALL_SYSCALL_EXIT:
              //printf("SYSEVENT exit: %" PRIu32 " \n", cuckoo_event);
+            etype = "exit";
             PPP_RUN_CB(on_sysevent_exit, cpu, cuckoo_event);
         break;
         case HYPERCALL_NOTIF:
+            etype = "notif";
             PPP_RUN_CB(on_sysevent_notif, cpu, cuckoo_event);
         break;
+    }
+
+    if(log_events){
+        nlohmann::json event;
+        if(etype){
+            event["type"] = etype;
+        } else {
+            event["type"] = env->regs[R_EBX];
+            event["eax"] = env->regs[R_EAX];
+        }
+        event["rrcount"] = rr_get_guest_instr_count();
+        event["id"] = env->regs[R_ECX];
+        event["asid"] = panda_current_asid(cpu);
+        event["pc"] = cpu->panda_guest_pc;
+        events_outfp << event.dump() << std::endl;
     }
 }
 #endif
@@ -147,11 +169,16 @@ bool init_plugin(void *self) {
     panda_arg_list *args = panda_get_args("sysevent");
     start_recording = panda_parse_bool_opt(args, "start_recording", "start recording on first sysevent");
     record_pids = panda_parse_bool_opt(args, "record_pids", "monitor pid-asid correspondence");
+    log_events = panda_parse_bool_opt(args, "log_events", "log events to file");
 
     const char* output_file = panda_parse_string_opt(args, "outf", nullptr, "monitor pid-asid correspondence");
 
     if(output_file){
-        outfp.open(output_file);
+        pids_outfp.open(output_file);
+    }
+
+    if(log_events){
+        events_outfp.open("events.txt");
     }
 
     if(record_pids){
@@ -166,7 +193,7 @@ bool init_plugin(void *self) {
 void uninit_plugin(void *self) {
     (void) self;
     if(record_pids){
-        std::ostream& out = outfp.is_open()? outfp : std::cout;
+        std::ostream& out = pids_outfp.is_open()? pids_outfp : std::cout;
 
         out << std::endl;
         for (auto const& x : pids)
@@ -188,6 +215,9 @@ void uninit_plugin(void *self) {
             out << result << std::endl;
             //free_osiproc(proc.proc);
         }
+    }
+    if(log_events){
+        events_outfp.close();
     }
 }
 

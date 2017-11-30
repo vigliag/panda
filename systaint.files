@@ -298,6 +298,7 @@ panda/plugins/systaint/logging.cpp
 panda/plugins/systaint/logging.cpp
 panda/plugins/systaint/logging.hpp
 panda/plugins/systaint/logging.hpp
+panda/plugins/systaint/mappings.hpp
 panda/plugins/systaint/syscall_listener.cpp
 panda/plugins/systaint/syscall_listener.cpp
 panda/plugins/systaint/syscall_listener.hpp

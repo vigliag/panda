@@ -121,14 +121,6 @@ include/standard-headers/asm-x86
 include/standard-headers/linux
 include/sysemu
 include/ui
-linux-headers/asm-arm
-linux-headers/asm-arm64
-linux-headers/asm-generic
-linux-headers/asm-mips
-linux-headers/asm-powerpc
-linux-headers/asm-s390
-linux-headers/asm-x86
-linux-headers/linux
 linux-user
 linux-user/aarch64
 linux-user/alpha
@@ -347,7 +339,6 @@ backends
 hw/input
 tests/tcg/mips/mips32-dspr2
 target/sparc
-build/linux-headers/asm
 qtrace
 build/i386-softmmu/panda/plugins/libfi
 hw/adc

@@ -165,10 +165,16 @@ void logEvent(const Event& event, FILE* filepointer){
 
     } else {
         assert(filepointer);
-        pbEvent->SerializeToFileDescriptor(fileno(filepointer));
-    }
 
-    delete(pbEvent);
+        std::string res = pbEvent->SerializeAsString();
+        size_t buffer_size = res.size();
+
+        fwrite(&buffer_size, sizeof(buffer_size), 1, filepointer);
+        fwrite(res.data(), buffer_size, 1, filepointer);
+        fflush(filepointer);
+
+        delete pbEvent;
+    }
 
     fprintf(stderr, "Logged %s \n", event.toString().c_str());
 }

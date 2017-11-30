@@ -17,6 +17,7 @@
 #include <unordered_map>
 #include <vector>
 #include <stdio.h>
+#include <json.hpp>
 
 #include "callstack_instr/callstack_instr.h"
 #include "EntropyCalculator.hpp"
@@ -34,6 +35,8 @@ using Address = target_ulong;
 using Funid = std::pair<Asid, Address>;
 using Callid = InstrCnt;
 
+static std::ofstream outfstream;
+
 // Stores informations about a called function.
 struct CallInfo {
     std::map<Address, uint8_t> writeset;
@@ -46,6 +49,8 @@ struct CallInfo {
     int writes = 0;
     int reads = 0;
     uint64_t called_by = 0;
+    uint64_t caller_addr = 0;
+    std::vector<Address> callstack;
 };
 
 /* Data structures */
@@ -75,25 +80,42 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
     // Get the two latest entries on the current stack.
     // The topmost will be this call
 
-    CallstackStackEntry entries[2] = {};
-    get_call_entries(entries, 2,cpu);
+    std::vector<CallstackStackEntry> entries(5);
+    int n_entries = get_call_entries(entries.data(),
+                                     static_cast<int>(entries.size()), cpu);
+    entries.resize(n_entries);
 
     const CallstackStackEntry& current_entry = entries[0];
-    const CallstackStackEntry& previous_entry = entries[1];
+
 
     assert(current_entry.call_id);
 
 
     // Count the number of calls with this asid we've seen
+    // ignore if we've seen enough calls of this function
     Funid fnid = make_pair(asid, entrypoint);
     n_calls[fnid]++;
-    if(n_calls[fnid] <= calls_to_monitor_per_fn_entrypoint) {
-        // create a call_info for this call
-        // successive memory callbacks will populate its writeset and readset
-        call_infos[callid].asid = asid;
-        call_infos[callid].program_counter = entrypoint;
-        call_infos[callid].called_by = previous_entry.call_id;
+    if(n_calls[fnid] > calls_to_monitor_per_fn_entrypoint) {
+        return;
     }
+
+    // create a call_info for this call
+    // successive memory callbacks will populate its writeset and readset
+    call_infos[callid].asid = asid;
+    call_infos[callid].program_counter = entrypoint;
+    call_infos[callid].instruction_count_call = callid;
+
+    if(n_entries > 1){
+        const CallstackStackEntry& previous_entry = entries[1];
+        call_infos[callid].called_by = previous_entry.call_id;
+
+        auto callstackit = entries.begin();
+        callstackit++;
+        for (; callstackit!= entries.end(); callstackit++){
+            call_infos[callid].callstack.push_back(callstackit->function);
+        }
+    }
+
 }
 
 
@@ -166,6 +188,14 @@ struct bufferinfo {
         ss << reinterpret_cast<void*>(base) << "+" << len << ":" << entropy << ";";
         return ss.str();
     }
+
+    nlohmann::json toJSON() const{
+        nlohmann::json ret;
+        ret["base"] = base;
+        ret["len"] = len;
+        ret["entropy"] = entropy;
+        return ret;
+    }
 };
 
 /* Computes a vector of BufferInfo from a map<address,data> (read/writeset) */
@@ -231,18 +261,35 @@ void on_ret(CPUState *cpu, target_ulong entrypoint, uint64_t callid, uint32_t sk
     std::vector<bufferinfo> writebuffs = toBufferInfos(call.writeset);
     std::vector<bufferinfo> readbuffs = toBufferInfos(call.readset);
 
-    std::cout << "RET " << callid << " ";
-    std::cout << call.asid << ":"<< call.program_counter;
+    hwaddr physPC = panda_virt_to_phys(cpu, call.program_counter);
 
-    std::cout << " writes=";
+    nlohmann::json out;
+
+    std::stringstream line;
+    out["asid"] = call.asid;
+    out["pc"] = call.program_counter;
+    out["phisical"] = physPC;
+    out["called_by"] = call.called_by;
+    out["id"] = call.instruction_count_call;
+
+    auto writes = nlohmann::json::array();
     for(const bufferinfo& wrb : writebuffs){
-        std::cout << wrb.toString();
+        writes.push_back(wrb.toJSON());
     }
-    std::cout << " reads=";
+
+    auto reads = nlohmann::json::array();
     for(const bufferinfo& rdb : readbuffs){
-        std::cout << rdb.toString();
+        reads.push_back(rdb.toJSON());
     }
-    std::cout << " called_by=" << call.called_by;
+
+    auto callstack = nlohmann::json::array();
+    for(const auto& addr : call.callstack){
+        callstack.push_back(addr);
+    }
+
+    out["writes"] = writes;
+    out["reads"] = reads;
+    out["callstack"] = callstack;
 
     int maxexecs = 0;
     int sumexecs = 0;
@@ -258,13 +305,14 @@ void on_ret(CPUState *cpu, target_ulong entrypoint, uint64_t callid, uint32_t sk
         distinct++;
     }
 
-    std::cout << " maxexecs=" << maxexecs;
-    std::cout << " sumexecs=" << sumexecs;
-    std::cout << " distinct=" << distinct;
-    std::cout << " nreads=" << call.reads;
-    std::cout << " nwrites=" << call.writes;
+    out["maxexecs"] = maxexecs;
+    out["sumexecs"] = sumexecs;
+    out["distinct_blocks"] = distinct;
+    out["nreads"] = call.reads;
+    out["nwrites"] = call.writes;
 
-    std::cout << std::endl ;
+    cout << out.dump() << std::endl;
+    outfstream << out.dump() << std::endl;
 
     call_infos.erase(callid);
 }
@@ -311,7 +359,7 @@ bool init_plugin(void *self) {
     if (!init_callstack_instr_api()) return false;
     
     panda_cb pcb;
-    
+
     //pcb.asid_changed = asid_changed;
     //panda_register_callback(self, PANDA_CB_ASID_CHANGED, pcb);
 
@@ -340,6 +388,11 @@ bool init_plugin(void *self) {
         printf("tracking asid " TARGET_FMT_ld  " \n", asid);
     }
 
+    outfstream.open("fn_memlogger");
+    if(outfstream.fail()){
+        return false;
+    }
+
     return true;
 }
 
@@ -356,5 +409,7 @@ void printstats(){
 
 void uninit_plugin(void *self) {
     (void) self;
+    outfstream.flush();
+    outfstream.close();
     printstats();
 }

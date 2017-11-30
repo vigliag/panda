@@ -11,6 +11,8 @@
 #include "sysevent/sysevent.h"
 #include "syscall_listener.hpp"
 #include <libgen.h>
+#include <json.hpp> //nlohmann json
+#include <unistd.h> //getcwd
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
@@ -50,6 +52,9 @@ using Asid = target_ulong;
 using Address = target_ulong;
 using Tag = uint32_t;
 using Label = uint32_t;
+
+std::map<Address, std::string> address_map;
+
 
 
 // Opened filepointer for writing the collected data
@@ -268,6 +273,7 @@ bool syscall_to_discard(unsigned syscall_no) {
   case 131: // NtFreeVirtualMemory (for simmetry)
   case 267: // NtQueryVirtualMemory (noise)
   case 335: // NtSetInformationThread (outlier)
+  case 216: // NtPulseEvent (no idea)
   case 44:
     return true;
   default:
@@ -789,6 +795,7 @@ bool init_plugin(void *self) {
     PPP_REG_CB("sysevent", on_sysevent_exit, external_event_exit);
 
     panda_arg_list *args = panda_get_args("systaint");
+
     if (args != NULL) {
 
         target_taint_at = panda_parse_uint64_opt(args, "taintat", 0, "instruction count when to enable tainting");
@@ -843,8 +850,7 @@ bool init_plugin(void *self) {
         outfile = panda_parse_string_opt(args, "outfile", nullptr, "an output file");
 
         if(!outfile && !pandalog){
-            std::cout << "Please pass an 'outfile' parameter, or enable pandalog" << std::endl;
-            return false;
+            outfile = "systaint";
         }
 
         debug_logs = panda_parse_bool_opt(args, "debug", "log additional debugging info");
@@ -852,11 +858,47 @@ bool init_plugin(void *self) {
     }
 
     if(outfile){
-        outfp = fopen(outfile, "w");
+
+        char temp[PATH_MAX];
+        string outFileName(outfile);
+
+        std::time_t t = std::time(nullptr);
+        if (std::strftime(temp, sizeof(temp), "%y-%m-%d-%H-%M", std::localtime(&t))) {
+            outFileName += temp;
+        }
+
+        outfp = fopen(outFileName.data(), "w");
         if(!outfp){
             perror("unable to open output file");
             exit(-1);
         }
+
+        // Dump analysis informations to file
+
+        nlohmann::json paramdump;
+        for (int i=0; i<args->nargs;i++) {
+            const panda_arg& arg = args->list[i];
+            paramdump[arg.key] = arg.value;
+        }
+
+        nlohmann::json analysisinfo;
+        char* res = getcwd(temp, sizeof(temp));
+        analysisinfo["params"] = paramdump;
+        analysisinfo["outfile"] = outFileName.data();
+        analysisinfo["build"] = __DATE__;
+        if(res){
+            analysisinfo["cwd"] = temp;
+        }
+
+        string analysisInfoName = outFileName + ".info.json";
+        string jsondump = analysisinfo.dump(2);
+
+        FILE* analysisInfoFile = fopen(analysisInfoName.data(), "w");
+        if(analysisInfoFile){
+            fwrite(jsondump.data(), jsondump.size(),1, analysisInfoFile);
+            fclose(analysisInfoFile);
+        }
+
     }
 
     for(const auto&i : monitored_encoding_calls){
