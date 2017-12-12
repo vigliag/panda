@@ -127,9 +127,10 @@ void TaintEngine::moveR2R(RegisterKind srctmp, target_ulong src,
     ShadowRegister *dstreg = getRegister(dsttmp, dst);
     ShadowRegister *srcreg = getRegister(srctmp, src);
 
-    TRACE("Taint moving R%c(%.2x %s %c) -> R%c(%.2x %s %c) lbl=%d", REGCHR(srctmp),
-          src, REGNAME(srcreg), REGTAINT(srcreg), REGCHR(dsttmp), dst,
-          REGNAME(dstreg), REGTAINT(dstreg), srcreg->firstLabel());
+    TRACE("Taint moving R%c(%.2x %s %c) -> R%c(%.2x %s %c) lbl=%d",
+          REGCHR(srctmp), src, REGNAME(srcreg), REGTAINT(srcreg),
+          REGCHR(dsttmp), dst, REGNAME(dstreg), REGTAINT(dstreg),
+          srcreg->firstLabel());
 
     dstreg->set(*srcreg);
     _updateRegisterCache(dsttmp, dst, dstreg->isTainted());
@@ -149,7 +150,8 @@ void TaintEngine::moveR2R(RegisterKind srctmp, target_ulong src,
     ShadowRegister *srcreg = getRegister(srctmp, src);
 
     for (unsigned i = 0; i < size; i++) {
-        TRACE("Taint moving 1 byte R%c(%.2x %s %c @%d) -> R%c(%.2x %s %c @%d), lbl=%d",
+        TRACE("Taint moving 1 byte R%c(%.2x %s %c @%d) -> R%c(%.2x %s %c @%d), "
+              "lbl=%d",
               REGCHR(srctmp), src, REGNAME(srcreg), REGTAINT(srcreg),
               srcoff + i, REGCHR(dsttmp), dst, REGNAME(dstreg),
               REGTAINT(dstreg), dstoff + i, srcreg->firstLabel());
@@ -169,16 +171,18 @@ void TaintEngine::combineR2R(RegisterKind srctmp, target_ulong src,
     ShadowRegister *dstreg = getRegister(dsttmp, dst);
     ShadowRegister *srcreg = getRegister(srctmp, src);
 
-    TRACE("Taint combining R%c(%.2x %s %c) -> R%c(%.2x %s %c), lbl=%d", REGCHR(srctmp),
-          src, REGNAME(srcreg), REGTAINT(srcreg), REGCHR(dsttmp), dst,
-          REGNAME(dstreg), REGTAINT(dstreg), srcreg->firstLabel());
+    TRACE("Taint combining R%c(%.2x %s %c) -> R%c(%.2x %s %c), lbl=%d",
+          REGCHR(srctmp), src, REGNAME(srcreg), REGTAINT(srcreg),
+          REGCHR(dsttmp), dst, REGNAME(dstreg), REGTAINT(dstreg),
+          srcreg->firstLabel());
 
     dstreg->combine(*srcreg);
     _updateRegisterCache(dsttmp, dst, dstreg->isTainted());
 }
 
-void TaintEngine::moveM2R(target_ulong addr, unsigned size, RegisterKind regtmp,
-                          target_ulong reg) {
+void TaintEngine::moveM2R(target_ulong addr, RegisterKind addr_reg_kind,
+                          target_ulong addr_reg, unsigned size,
+                          RegisterKind regtmp, target_ulong reg) {
     assert(size <= 8);
     ShadowRegister *regobj = getRegister(regtmp, reg);
 
@@ -199,6 +203,18 @@ void TaintEngine::moveM2R(target_ulong addr, unsigned size, RegisterKind regtmp,
             regobj->set(mem_.getTaintLocation(addr + i), i);
         }
     }
+
+    if (taint_dereference_enabled_ &&
+        isTaintedRegister(addr_reg_kind, addr_reg)) {
+        ShadowRegister *addrregobj = getRegister(addr_reg_kind, addr_reg);
+        TRACE(
+            "Taint load dereference R%c(%.2x %s %c) -> R%c(%.2x %s %c), lbl=%d",
+            REGCHR(addr_reg_kind), addr_reg, REGNAME(addrregobj), REGTAINT(addrregobj),
+            REGCHR(regtmp), reg, REGNAME(regobj), REGTAINT(regobj),
+            addrregobj->firstLabel());
+        regobj->combine(*addrregobj);
+    }
+
     _updateRegisterCache(regtmp, reg, regobj->isTainted());
 }
 
@@ -247,8 +263,8 @@ void TaintEngine::moveR2M(RegisterKind regtmp, target_ulong reg,
 
     ShadowRegister *regobj = getRegister(regtmp, reg);
 
-    TRACE("R2M R%c(%.2x %s) -> M(%.8x), lb=%d size=%d", REGCHR(regtmp),
-          reg, REGNAME(regobj), addr, regobj->firstLabel(), size);
+    TRACE("R2M R%c(%.2x %s) -> M(%.8x), lb=%d size=%d", REGCHR(regtmp), reg,
+          REGNAME(regobj), addr, regobj->firstLabel(), size);
 
     for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
         if (!regobj->isTaintedByte(i)) {

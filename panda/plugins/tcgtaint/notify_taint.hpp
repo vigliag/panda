@@ -21,7 +21,8 @@ void notify_taint_register(bool istmp, unsigned char regno, int label);
 bool notify_taint_check_memory(target_ulong addr, unsigned int size);
 
 /* Data movement */
-void notify_taint_moveM2R(target_ulong addr, int size, bool istmp,
+void notify_taint_moveM2R(target_ulong addr, bool is_addr_tmp,
+                          target_ulong addr_reg, int size, bool istmp,
                           target_ulong reg);
 void notify_taint_moveR2M(bool istmp, target_ulong reg, target_ulong addr,
                           int size);

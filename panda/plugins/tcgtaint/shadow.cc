@@ -14,6 +14,7 @@ void ShadowRegister::set(const ShadowRegister &other) {
 }
 
 void ShadowRegister::combine(const ShadowRegister &other) {
+    //TODO combine is implemented wrong, it shouldn't work byte-per-byte at all
     for (int i = 0; i < std::min(size_, other.size_); i++) {
         reg_[i].combine(other.reg_[i]);
     }
@@ -55,7 +56,7 @@ bool ShadowRegister::hasLabel(int label) const {
 
 void ShadowMemory::set(const TaintLocation *loc, target_ulong addr) {
     if (mem_.find(addr) == mem_.end()) {
-        mem_[addr] = std::shared_ptr<TaintLocation>(new TaintLocation);
+        mem_[addr] = std::make_shared<TaintLocation>();
     }
 
     mem_[addr]->set(*loc);

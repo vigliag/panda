@@ -16,6 +16,8 @@
 // in here in order to get target_ulong?
 #include "panda/plugin.h"
 
+using Label = int;
+
 //
 // An instance of the TaintLocation class represents a tainted memory location
 // or CPU register.
@@ -61,7 +63,7 @@ class TaintLocation {
     inline const std::set<int> &getLabels() { return labels_; }
 
   private:
-    std::set<int> labels_;
+    std::set<Label> labels_;
 };
 
 using shadowmemory_t =
@@ -156,6 +158,14 @@ class ShadowRegister {
 
         for (unsigned int i = offset; i < (offset + size); i++) {
             reg_[i].clear();
+        }
+    }
+
+    void getAllLabels(std::set<Label>* out) const {
+        for (int i = 0; i < size_; i++) {
+            for (const Label l : reg_[i].getLabels()) {
+                out->insert(l);
+            }
         }
     }
 

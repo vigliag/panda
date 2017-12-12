@@ -21,3 +21,4 @@ tcgtaint
 fn_memlogger
 sysevent
 sysrecstarter
+procinfodump

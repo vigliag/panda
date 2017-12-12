@@ -89,7 +89,7 @@ bool panda_load_plugin(const char *filename, const char *plugin_name) {
     // and not yet called init_plugin fn.  needed to avoid infinite loop with panda_require  
     panda_plugins_loaded[nb_panda_plugins_loaded] = strdup(filename);
     nb_panda_plugins_loaded ++;
-    void *plugin = dlopen(filename, RTLD_NOW);
+    void *plugin = dlopen(filename, RTLD_NOW | RTLD_GLOBAL);
     if(!plugin) {
         fprintf(stderr, "Failed to load %s: %s\n", filename, dlerror());
         return false;

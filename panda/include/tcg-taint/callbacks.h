@@ -7,8 +7,9 @@ extern notify_taint_regalloc_t notify_taint_regalloc;
 
 /* Data movement */
 
-typedef void (*notify_taint_moveM2R_t)(target_ulong addr, int size, bool istmp,
-                                       target_ulong reg);
+typedef void (*notify_taint_moveM2R_t)(target_ulong addr, bool is_addr_tmp,
+                                       target_ulong addr_reg, int size,
+                                       bool istmp, target_ulong reg);
 extern notify_taint_moveM2R_t notify_taint_moveM2R;
 
 typedef void (*notify_taint_moveR2M_t)(bool istmp, target_ulong reg,

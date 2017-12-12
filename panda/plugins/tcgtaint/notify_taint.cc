@@ -27,7 +27,8 @@ static inline hwaddr virt_to_phys(target_ulong addr, unsigned int size) {
 
 namespace qtrace {
 
-void notify_taint_moveM2R(target_ulong addr, int size, bool istmp,
+void notify_taint_moveM2R(target_ulong addr, bool is_addr_tmp,
+                          target_ulong addr_reg, int size, bool istmp,
                           target_ulong reg) {
     assert(size > 7);
     size = size / 8;
@@ -38,7 +39,7 @@ void notify_taint_moveM2R(target_ulong addr, int size, bool istmp,
         return;
     }
 
-    tcgtaint_ctx.taint_engine->moveM2R(phyaddr, size, RegisterKind(istmp), reg);
+    tcgtaint_ctx.taint_engine->moveM2R(phyaddr, RegisterKind(is_addr_tmp), addr_reg, size, RegisterKind(istmp), reg);
 }
 
 // We are practically storing into a register

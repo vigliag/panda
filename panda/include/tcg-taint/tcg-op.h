@@ -54,9 +54,10 @@ static inline void tcg_gen_qtrace_qemu_ld(TCGv arg, TCGv addr, int size) {
     // real register, whose value we care about at runtime
 
     TCGv_i32 argidx = tcg_const_i32(GET_TCGV_I32(arg));
+    TCGv_i32 addridx = tcg_const_i32(GET_TCGV_I32(addr));
     TCGv_i32 ldsize = tcg_const_i32(size);
 
-    gen_helper_qtrace_mem2reg(argidx, addr, ldsize);
+    gen_helper_qtrace_mem2reg(argidx, addridx, addr, ldsize);
 
     tcg_temp_free_i32(argidx);
     tcg_temp_free_i32(ldsize);
@@ -69,9 +70,10 @@ static inline void tcg_gen_qtrace_qemu_ld_i64(TCGv_i64 arg, TCGv addr,
     QTRACE_INSTRUMENT_START();
 
     TCGv_i32 argidx = tcg_const_i32(GET_TCGV_I64(arg));
+    TCGv_i32 addridx = tcg_const_i32(GET_TCGV_I32(addr));
     TCGv_i32 ldsize = tcg_const_i32(size);
 
-    gen_helper_qtrace_mem2reg(argidx, addr, ldsize);
+    gen_helper_qtrace_mem2reg(argidx, addridx, addr, ldsize);
 
     tcg_temp_free_i32(argidx);
     tcg_temp_free_i32(ldsize);

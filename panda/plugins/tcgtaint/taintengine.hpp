@@ -26,7 +26,7 @@ enum RegisterKind : int { global = 0, temporary = 1 };
 //
 class TaintEngine {
   public:
-    explicit TaintEngine() : taint_user_enabled_(true) {}
+    explicit TaintEngine(){}
 
     // Enable/disable the taint propagation engine
     // void setEnabled(bool status);
@@ -92,7 +92,7 @@ class TaintEngine {
                  target_ulong dst);
     void moveR2M(RegisterKind regtmp, target_ulong reg, target_ulong addr,
                  unsigned size);
-    void moveM2R(target_ulong addr, unsigned size, RegisterKind regkind,
+    void moveM2R(target_ulong addr, RegisterKind addr_reg_kind, target_ulong addr_reg, unsigned size, RegisterKind regkind,
                  target_ulong reg);
 
     void moveR2MicroM(RegisterKind regtmp, target_ulong reg, target_ulong addr,
@@ -115,15 +115,15 @@ class TaintEngine {
 
     // convenience function added to allow a c-compatible api
     const std::set<int> *getMemoryLabels(target_ulong addr) const;
-
+    void set_taint_dereference(bool enabled){
+        taint_dereference_enabled_ = enabled;
+    }
   private:
     // Caches used to efficiently check if a register is tainted
     std::bitset<NUM_CPU_REGS> regcache_cpu_;
     std::bitset<NUM_TMP_REGS> regcache_tmp_;
 
-    // User-controlled status
-    // TODO now unused. Remove?
-    bool taint_user_enabled_;
+    bool taint_dereference_enabled_ = false;
 
     // Shadow registers and memory
     ShadowRegister cpuregs_[NUM_CPU_REGS];

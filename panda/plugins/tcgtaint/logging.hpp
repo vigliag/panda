@@ -13,7 +13,8 @@
 // 4 = DEBUG
 // 5 = TRACE
 
-#define LOG_LEVEL 1
+#define MAX_LOG_LEVEL 5
+extern int tcgtaint_loglevel;
 
 // Uncomment to include the program counter (i.e., TB address) in the debug
 // logs
@@ -21,32 +22,32 @@
 
 #define LOG(level, ...) qtrace_log_(__LINE__, level, __VA_ARGS__)
 
-#if LOG_LEVEL >= 5
-#define TRACE(...) LOG("TRA", __VA_ARGS__)
+#if MAX_LOG_LEVEL >= 5
+#define TRACE(...) if(tcgtaint_loglevel >=5){ LOG("TRA", __VA_ARGS__); }
 #else
 #define TRACE(...)
 #endif
 
-#if LOG_LEVEL >= 4
-#define DEBUG(...) LOG("DBG", __VA_ARGS__)
+#if MAX_LOG_LEVEL >= 4
+#define DEBUG(...) if(tcgtaint_loglevel >=4){ LOG("DBG", __VA_ARGS__); }
 #else
 #define DEBUG(...)
 #endif
 
-#if LOG_LEVEL >= 3
-#define INFO(...) LOG("INF", __VA_ARGS__)
+#if MAX_LOG_LEVEL >= 3
+#define INFO(...) if(tcgtaint_loglevel >=3){ LOG("INF", __VA_ARGS__); }
 #else
 #define INFO(...)
 #endif
 
-#if LOG_LEVEL >= 2
-#define WARNING(...) LOG("WAR", __VA_ARGS__)
+#if MAX_LOG_LEVEL >= 2
+#define WARNING(...) if(tcgtaint_loglevel >=2){ LOG("WAR", __VA_ARGS__); }
 #else
 #define WARNING(...)
 #endif
 
-#if LOG_LEVEL >= 1
-#define ERROR(...) LOG("ERR", __VA_ARGS__)
+#if MAX_LOG_LEVEL >= 1
+#define ERROR(...) if(tcgtaint_loglevel >=1){ LOG("ERR", __VA_ARGS__); }
 #else
 #define ERROR(...)
 #endif

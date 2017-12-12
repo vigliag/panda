@@ -39,9 +39,10 @@ void helper_qtrace_micro_st(target_ulong reg, target_ulong addr,
     notify_taint_micro_st(REG_IDX(true, reg), addr, size);
 }
 
-void helper_qtrace_mem2reg(target_ulong reg, target_ulong addr, uint32_t size) {
+void helper_qtrace_mem2reg(target_ulong reg, target_ulong addr_reg, target_ulong addr, uint32_t size) {
     bool istmp = register_is_temp(reg);
-    notify_taint_moveM2R(addr, size, istmp, REG_IDX(istmp, reg));
+    bool is_addr_tmp = register_is_temp(addr_reg);
+    notify_taint_moveM2R(addr,is_addr_tmp, REG_IDX(is_addr_tmp, addr_reg), size, istmp, REG_IDX(istmp, reg));
 }
 
 void helper_qtrace_micro_ld(target_ulong reg, target_ulong addr,

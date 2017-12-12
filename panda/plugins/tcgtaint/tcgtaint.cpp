@@ -19,6 +19,8 @@ PANDAENDCOMMENT */
 #include "panda/plugin.h"
 #include "tcg-taint/callbacks.h"
 #include "tcg-taint/tcg-taint.h"
+#include "logging.hpp"
+#include <iostream>
 
 TCGTaintContext tcgtaint_ctx;
 bool taint_is_user_enabled = false;
@@ -56,7 +58,9 @@ int tcgtaint_after_block_callback(CPUState *cpu, TranslationBlock *tb) {
     return 0;
 }
 
+int tcgtaint_loglevel;
 extern int qemu_loglevel;
+
 bool init_plugin(void *self) {
     // Init taint engine
     tcgtaint_ctx.taint_engine = new TaintEngine();
@@ -75,6 +79,17 @@ bool init_plugin(void *self) {
     notify_taint_micro_ld = qtrace::notify_taint_micro_ld;
     notify_taint_micro_st = qtrace::notify_taint_micro_st;
 
+    panda_arg_list *args = panda_get_args("tcgtaint");
+    bool enable_taint_dereference = panda_parse_bool_opt(args, "taint_dereference", "taint through pointer deference (load only)");
+    if(enable_taint_dereference){
+        std::cout << "tcgtaint: taint_dereference " << enable_taint_dereference << std::endl;
+    }
+    tcgtaint_ctx.taint_engine->set_taint_dereference(enable_taint_dereference);
+
+    tcgtaint_loglevel = panda_parse_uint32_opt(args, "loglevel", 1, "loglevel");
+    if(tcgtaint_loglevel > MAX_LOG_LEVEL){
+        std::cout << "warning, selected log level is above MAX_LOG_LEVEL" << std::endl;
+    }
     tcg_taint_instrumentation_init();
     panda_disable_tb_chaining();
     panda_enable_precise_pc();

@@ -312,7 +312,7 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     std::vector<stack_entry> &v = callstacks[current_stackid];
     if (v.empty()) return 1;
 
-    // search the shadow stack top-to-bottom order, for a max depth of 20
+    // search the shadow stack top-to-bottom order, for a max depth of 30
 
     const int max_depth = 30;
     bool found = false;
