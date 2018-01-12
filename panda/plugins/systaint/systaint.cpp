@@ -318,11 +318,27 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     new_event->started = call.start;
     new_event->label = next_available_label++;
 
-    if(use_candidate_pointers){
-        new_event->knownDataPointers.insert(arg_start);
+    events.put_event(thread, new_event);
+
+    // Read syscall parameters from argument stack (win7x86 only)
+
+    uint64_t arg_start_pa = panda_virt_to_phys(cpu, arg_start);
+    if(arg_start_pa == static_cast<uint64_t>(-1)){
+        cout << "ERROR panda_virt_to_phys errored while translating " << arg_start_pa << endl;
+        return;
     }
 
-    events.put_event(thread, new_event);
+    unsigned const paramNumber = sc.paramNumber();
+    for(unsigned i=0; i< paramNumber; i++){
+        uint32_t buf = 0;
+        const int res = panda_virtual_memory_read(cpu, arg_start_pa + (i*4), reinterpret_cast<uint8_t*>(&buf), 4);
+        if(res == -1){
+            cerr << "ERROR unable to read syscall param" << endl;
+        } else {
+            new_event->knownDataPointers.insert(buf, static_cast<int>(i));
+        }
+        new_event->argStack.push_back(buf);
+    }
 
     if(current_tags.size()){
         cout << "current_tag " << current_tags[0] << endl;
@@ -337,11 +353,6 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
 
     uint32_t taint_label = static_cast<uint32_t>(new_event->started);
 
-    uint64_t arg_start_pa = panda_virt_to_phys(cpu, arg_start);
-    if(arg_start_pa == static_cast<uint64_t>(-1)){
-        cout << "ERROR panda_virt_to_phys errored while translating " << arg_start_pa << endl;
-        return;
-    }
 
     cout << "Tainting syscall args with lbl=" << taint_label << endl ;
     writeLabelPA(arg_start_pa, arg_len, taint_label, LABEL_ADDITIVE);
@@ -521,30 +532,9 @@ void on_function_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
 }
 
 
-// ======================== 
-// Memory access tracking 
 // ========================
-
-static bool addressIsNearCandidatePointer(const std::shared_ptr<Event>& p_curr_event, const target_ulong addr){
-    auto it_after = p_curr_event->knownDataPointers.upper_bound(addr);
-
-    if(it_after == p_curr_event->knownDataPointers.begin()){
-        //can happen if .begin() == .end(), or if there's no smaller pointer
-        puts("discard (no lower)");
-        return false;
-    } else {
-        it_after--;
-
-        target_ulong closest_known_pointer = *it_after;
-        if (addr - closest_known_pointer >= 0x1000){
-            //discard as the first candidate pointer is too distant
-            puts("discard (too distant)");
-            return false;
-        }
-    }
-
-    return true;
-}
+// Memory access tracking
+// ========================
 
 
 int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
@@ -584,10 +574,12 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         }
 
         if(p_current_event->kind != EventKind::encoding){
+            auto closest_datapointer = p_current_event->knownDataPointers.closest_known_datapointer(addr);
+
             if(only_taint_syscall_args){
                 should_taint = false;
             } else if(use_candidate_pointers){
-                should_taint = addressIsNearCandidatePointer(p_current_event, addr);
+                should_taint = closest_datapointer.has_value();
             }
         }
 
@@ -635,8 +627,9 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     // If there's an event currently executing, track its reads to find dependencies
     // from previous syscalls
 
-    if(use_candidate_pointers){
-        bool add_addr_to_candidate_pointers = addressIsNearCandidatePointer(p_current_event, addr);
+    if(use_candidate_pointers || true){
+        auto closest_datapointer = p_current_event->knownDataPointers.closest_known_datapointer(addr);
+        bool add_addr_to_candidate_pointers = closest_datapointer.has_value();
 
         if(add_addr_to_candidate_pointers){
             uint32_t pointers_read = 0;
@@ -645,7 +638,7 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             // TODO not sure there's a point in reading more than a pointer at once
             while(size - pointers_read * sizeof(target_ulong) <= sizeof(target_ulong)){
                 target_ulong ptr = ptrptr[pointers_read];
-                p_current_event->knownDataPointers.insert(ptr);
+                p_current_event->knownDataPointers.insert(ptr, closest_datapointer->tag);
                 pointers_read++;
             }
         }

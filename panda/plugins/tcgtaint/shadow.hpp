@@ -195,6 +195,9 @@ class ShadowRegister {
     // Get register name
     const std::string getName() const { return name_; }
 
+    // Get register name (c version)
+    const char * getCName() const { return name_.empty() ? NULL : name_.c_str(); }
+
     // Gets the first label at the first byte (useful for debugging purposes)
     int firstLabel() const{
         if(!reg_[0].isTainted())

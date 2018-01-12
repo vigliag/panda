@@ -18,6 +18,7 @@ message SysFnCall {
    required uint32 thread = 10;
    repeated uint32 callstack = 11;
    required uint32 label = 12;
+   repeated uint32 argstack = 13;
 }
 
 optional SysFnCall encfncall = 57;

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <sstream>
 #include <vector>
+#include <optional>
 
 class CallMemAccessTracker
 {
@@ -51,9 +52,62 @@ enum class EventKind {
   external
 };
 
+/* TODO
+auto cmp = [](int a, int b) { return ... };
+set<int, decltype(cmp)> s(cmp);
+
+
+*/
+
+struct KnownDataPointer{
+    target_ulong pointer;
+    int tag; //allows tagging a pointer, eg: with the number of the syscall argument
+
+    KnownDataPointer(target_ulong pointer, int tag) : pointer(pointer), tag(tag){}
+};
+
+class KnownDataPointerStorage {
+    struct KnownDataPointerCmp {
+        bool operator()(const KnownDataPointer&a, const KnownDataPointer&b) const{
+            return a.pointer < b.pointer;
+        }
+    };
+
+private:
+    std::set<KnownDataPointer, KnownDataPointerCmp> knownDataPointers;
+
+public:
+
+    void insert(target_ulong pointer, int tag=-1){
+        knownDataPointers.emplace(pointer, tag);
+    }
+
+    std::optional<KnownDataPointer> closest_known_datapointer(target_ulong addr) const {
+        KnownDataPointer query(addr, -1);
+        auto it_after = knownDataPointers.upper_bound(query);
+
+        if(it_after == knownDataPointers.begin()){
+            //can happen if .begin() == .end(), or if there's no smaller pointer
+            puts("discard (no lower)");
+            return std::optional<KnownDataPointer>();
+        }
+
+        it_after--;
+
+        auto closest_known_data_pointer = *it_after;
+        if (addr - closest_known_data_pointer.pointer >= 0x1000){
+            //discard as the first candidate pointer is too distant
+            puts("discard (too distant)");
+            return std::optional<KnownDataPointer>();
+        }
+
+        return std::optional<KnownDataPointer>(closest_known_data_pointer);
+    }
+};
+
 struct Event {
     CallMemAccessTracker memory;
-    std::set<target_ulong> knownDataPointers;
+    KnownDataPointerStorage knownDataPointers;
 
     uint64_t started = 0;
     uint64_t ended = 0;
@@ -63,6 +117,8 @@ struct Event {
 
     std::vector<uint32_t> tags;
     std::vector<target_ulong> callstack;
+
+    std::vector<uint32_t> argStack;
 
     FQThreadId thread;
     EventKind kind = EventKind::unknown;

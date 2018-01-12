@@ -133,11 +133,21 @@ void logEvent(const Event& event, FILE* filepointer){
 
         read->set_value(buffer.data.data(), buffer.data.size());
         read->set_address(addr);
-        read->set_argno(0);
+
+        std::optional<KnownDataPointer> closest_known_datapointer = event.knownDataPointers.closest_known_datapointer(addr);
+        if(closest_known_datapointer){
+            read->set_argno(closest_known_datapointer->tag);
+        }else{
+            read->set_argno(0);
+        }
     }
 
     for(const auto& tag : tags){
         pbEvent->add_tags(tag);
+    }
+
+    for(const auto& argval : event.argStack){
+        pbEvent->add_argstack(argval);
     }
 
     for(const auto& call: event.callstack){

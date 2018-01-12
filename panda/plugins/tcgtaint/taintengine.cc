@@ -13,7 +13,7 @@
 
 #define REGCHR(x) ((x) ? 't' : 'c')
 #define REGNAME(obj)                                                           \
-    ((obj)->getName().length() > 0 ? (obj)->getName().c_str() : "noname")
+    ((obj)->getCName() ? (obj)->getCName() : "noname")
 #define REGTAINT(obj) ((obj)->isTainted() ? 'T' : 'C')
 
 void TaintEngine::setRegisterName(target_ulong regno, const char *name) {

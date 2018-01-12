@@ -166,7 +166,8 @@ static stackid get_stackid_from_closest_seen_stack(CPUState* cpu) {
     if (last_seen_sp && last_seen_sp_asid == current_asid) {
 
         // Try with the last_seen_sp first
-        if (std::abs(current_sp - last_seen_sp) < MAX_STACK_DIFF) {
+        int64_t stack_diff = current_sp - last_seen_sp;
+        if (std::abs(stack_diff) < MAX_STACK_DIFF) {
             return std::make_pair(current_asid, last_seen_sp);
         }
 
@@ -197,13 +198,16 @@ static stackid get_stackid_from_closest_seen_stack(CPUState* cpu) {
     if (lb != stackset.begin()) {
         lb--;
         target_ulong value_less_than = *lb;
-        if( !closest_known_sp || std::abs(value_less_than - current_sp) < std::abs(closest_known_sp - current_sp) ){
+        const int64_t diff_value_lt = value_less_than - current_sp;
+        const int64_t diff_sp_closest_sp = closest_known_sp - current_sp;
+        if( !closest_known_sp || std::abs(diff_value_lt) < std::abs(diff_sp_closest_sp) ){
             closest_known_sp = current_sp;
         }
     }
 
     // Is the closest_known_sp close enough?
-    uint32_t diff = static_cast<uint32_t>(std::abs(current_sp - closest_known_sp));
+    const int64_t sp_diff = current_sp - closest_known_sp;
+    uint32_t diff = static_cast<uint32_t>(std::abs(sp_diff));
     if (diff < MAX_STACK_DIFF) {
         last_seen_sp = current_sp;
         last_seen_sp_asid = current_asid;

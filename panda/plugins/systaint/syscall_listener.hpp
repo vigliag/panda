@@ -11,6 +11,10 @@ struct SyscallDef {
     std::string retval;
     std::vector<std::string> argDefs;
 
+    unsigned paramNumber() const {
+        return static_cast<unsigned>(argDefs.size());
+    }
+
     std::size_t paramSize() const{
         return argDefs.size() * 4;
     }

@@ -1,7 +1,7 @@
 # Don't forget to add your plugin to config.panda!
 
 # If you need custom CFLAGS or LIBS, set them up here
-CFLAGS+= -std=c++14 -fPIC -O1 -g
+CFLAGS+= -std=c++17 -fPIC -O1 -g
 LIBS+= -lprotobuf-c -lboost_regex
 
 # The main rule for your plugin. List all object-file dependencies.
