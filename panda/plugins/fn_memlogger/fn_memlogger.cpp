@@ -18,6 +18,7 @@
 #include <vector>
 #include <stdio.h>
 #include <json.hpp>
+#include <cctype>
 
 #include "callstack_instr/callstack_instr.h"
 #include "EntropyCalculator.hpp"
@@ -182,6 +183,7 @@ struct bufferinfo {
     target_ulong base = 0;
     target_ulong len = 0;
     float entropy = -1;
+    int printableChars = 0;
 
     std::string toString() const {
         std::stringstream ss;
@@ -194,6 +196,7 @@ struct bufferinfo {
         ret["base"] = base;
         ret["len"] = len;
         ret["entropy"] = entropy;
+        ret["printableChars"] = printableChars;
         return ret;
     }
 };
@@ -206,31 +209,35 @@ std::vector<bufferinfo> toBufferInfos(std::map<target_ulong, uint8_t>& addrset){
 
     for (const auto& addr_data : addrset) {
         const auto& addr = addr_data.first;
+        const auto& data = addr_data.second;
 
-        if(addr == temp.base + temp.len + 1){
-            // continue previous buffer
-            temp.len++;
-            ec.add(addr_data.second);
+        if(addr != temp.base + temp.len){
+            // start new bufferr
 
-        } else {
-            // start new buffer
-
+            // save old buffer (if there's one)
             if(temp.base){
-                // save the old one first
                 temp.entropy = ec.get();
                 res.push_back(temp);
             }
 
             // init new buffer
-            temp.len = 0;
+            temp = {};
             temp.base = addr;
             ec.reset();
-            ec.add(addr_data.second);
         }
+
+        // add byte to current buffer
+        temp.len++;
+        if(std::isprint(data)){
+            temp.printableChars++;
+        }
+        ec.add(data);
+
     }
 
     // process last buffer (if any - ie addrset wasn't empty)
     if(temp.base){
+        //save
         temp.entropy = ec.get();
         res.push_back(temp);
     }
