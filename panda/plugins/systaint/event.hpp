@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <sstream>
 #include <vector>
-#include <optional>
+#include <boost/optional.hpp>
 
 class CallMemAccessTracker
 {
@@ -83,14 +83,14 @@ public:
         knownDataPointers.emplace(pointer, tag);
     }
 
-    std::optional<KnownDataPointer> closest_known_datapointer(target_ulong addr) const {
+    boost::optional<KnownDataPointer> closest_known_datapointer(target_ulong addr) const {
         KnownDataPointer query(addr, -1);
         auto it_after = knownDataPointers.upper_bound(query);
 
         if(it_after == knownDataPointers.begin()){
             //can happen if .begin() == .end(), or if there's no smaller pointer
             //puts("discard (no lower)");
-            return std::optional<KnownDataPointer>();
+            return boost::optional<KnownDataPointer>();
         }
 
         it_after--;
@@ -99,10 +99,10 @@ public:
         if (addr - closest_known_data_pointer.pointer >= 0x1000){
             //discard as the first candidate pointer is too distant
             //puts("discard (too distant)");
-            return std::optional<KnownDataPointer>();
+            return boost::optional<KnownDataPointer>();
         }
 
-        return std::optional<KnownDataPointer>(closest_known_data_pointer);
+        return boost::optional<KnownDataPointer>(closest_known_data_pointer);
     }
 };
 

@@ -596,7 +596,7 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             if(only_taint_syscall_args){
                 should_taint = false;
             } else if(use_candidate_pointers){
-                should_taint = closest_datapointer.has_value();
+                should_taint = bool(closest_datapointer);
             }
         }
 
@@ -646,7 +646,7 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
 
     if(use_candidate_pointers || true){
         auto closest_datapointer = p_current_event->knownDataPointers.closest_known_datapointer(addr);
-        bool add_addr_to_candidate_pointers = closest_datapointer.has_value();
+        bool add_addr_to_candidate_pointers = bool(closest_datapointer);
 
         if(add_addr_to_candidate_pointers){
             uint32_t pointers_read = 0;
