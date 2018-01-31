@@ -139,4 +139,5 @@ trace-ust-all.c
 build/
 *.autosave
 .vscode/
-systaint.creator.user
+systaint.creator.user*
+panda/config-temp/
