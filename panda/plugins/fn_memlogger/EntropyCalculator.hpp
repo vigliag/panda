@@ -18,8 +18,8 @@ public:
         float entropy = 0;
         for (int i = 0; i < 256; i++){
             if (bytecount[i]){
-                float count = static_cast<float>(bytecount[i]) / static_cast<float>(length);
-                entropy += -count * log2f(count);
+                float frequency = static_cast<float>(bytecount[i]) / static_cast<float>(length);
+                entropy += -frequency * log2f(frequency);
              }
         }
         return entropy;

@@ -99,6 +99,10 @@ setmap_to_vectormap(const std::map<uint32_t, std::set<uint32_t>>& setmap){
 
 void logEvent(const Event& event, FILE* filepointer){
 
+    if(event.discard == true){
+        return;
+    }
+
     panda::SysFnCall *pbEvent = new panda::SysFnCall;
 
     pbEvent->set_started(event.started);

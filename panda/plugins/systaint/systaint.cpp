@@ -5,6 +5,8 @@
 * event, and the provenance of each byte.
 */
 
+#pragma GCC diagnostic ignored "-Wformat-y2k"
+
 #include "panda/plugin.h" //include plugin api we are implementing
 //#include "taint2/taint2.h" //include taint2 module we'll use
 #include "callstack_instr/callstack_instr.h"
@@ -158,7 +160,8 @@ static EventTracker events;
 
 static std::set<hwaddr> phisicalAddressesToTaint;
 
-static uint32_t next_available_label = 0;
+//starting from 1000, so we can use the first 1000 for progressive notifications
+static uint32_t next_available_label = 1000;
 
 // Wrappers:
 
@@ -274,6 +277,7 @@ bool syscall_to_discard(unsigned syscall_no) {
   case 267: // NtQueryVirtualMemory (noise)
   case 335: // NtSetInformationThread (outlier)
   case 216: // NtPulseEvent (no idea)
+  case 271: // NtRaiseException (ehrm... noise?)
   case 44:
     return true;
   default:
@@ -309,6 +313,12 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     if (current_event) {
       cout << "SYSENTER ENCOUNTERED " << sc.callno << " " << sc.name
            << " while current_event was" << current_event->toString() << endl;
+
+      if(current_event->kind == EventKind::encoding){
+          current_event->discard = true;
+      }
+
+       events.closeEvent(thread, *current_event);
     }
 
     cout << "SYSENTER " << sc.callno << " " << sc.name << endl;
@@ -331,10 +341,11 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
     unsigned const paramNumber = sc.paramNumber();
     for(unsigned i=0; i< paramNumber; i++){
         uint32_t buf = 0;
-        const int res = panda_virtual_memory_read(cpu, arg_start_pa + (i*4), reinterpret_cast<uint8_t*>(&buf), 4);
+        const int res = panda_virtual_memory_read(cpu, arg_start + (i*4), reinterpret_cast<uint8_t*>(&buf), 4);
         if(res == -1){
             cerr << "ERROR unable to read syscall param" << endl;
         } else {
+            cerr << "READ syscall param " << buf << endl;
             new_event->knownDataPointers.insert(buf, static_cast<int>(i));
         }
         new_event->argStack.push_back(buf);
@@ -416,9 +427,7 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
 
     cout << "external event: " << event_label << " instcount " <<  rr_get_guest_instr_count() << endl;
 
-    if(!extevents_as_primary){
-        current_tags.push_back(event_label);
-    }
+    current_tags.push_back(event_label);
 
     if(extevents_as_primary){
         if(!current_event){
@@ -495,10 +504,18 @@ void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         auto thread = getFQThreadId(cpu);
         auto p_current_event = events.getEvent(thread);
 
-        if(p_current_event && p_current_event->kind == EventKind::syscall){
-            cerr << "encoding call during a syscall. This shouldn't happen. "
-                 << entrypoint << " " << callid << " -- " << p_current_event->toString() << endl;
-            return;
+        if(p_current_event){
+            if(p_current_event->kind == EventKind::syscall){
+                cerr << "encoding call during a syscall. This shouldn't happen. "
+                     << entrypoint << " " << callid << " -- " << p_current_event->toString() << endl;
+                return;
+            }
+
+            if(p_current_event->kind == EventKind::encoding){
+                cerr << "encoding call during an encoding call. Ignoring "
+                     << entrypoint << " " << callid << " -- " << p_current_event->toString() << endl;
+                return;
+            }
         }
 
         cout << "CALL " << entrypoint << " " << callid << endl;
@@ -731,6 +748,43 @@ int asid_changed_callback(CPUState* cpu, uint32_t oldasid, uint32_t newasid){
     return 0;
 }
 
+void external_event_notif(CPUState *cpu, uint32_t eventid, uint32_t pointer, uint32_t len){
+    (void) cpu;
+
+    Event e;
+    e.entrypoint = eventid;
+    e.label = eventid;
+    e.started = rr_get_guest_instr_count();
+    e.ended = rr_get_guest_instr_count();
+    e.kind = EventKind::notification;
+
+    std::vector<uint8_t> buf(len);
+    int res = panda_virtual_memory_read(cpu, pointer, &buf[0], static_cast<int>(len));
+    if(res != -1){
+
+        for(target_ulong i = 0; i < len; i++){
+            e.memory.read(pointer+i, buf[i]);
+        }
+
+        readLabels(cpu, pointer, len, [&e](uint32_t addri, uint32_t dep){
+             e.memory.readdep(addri, dep);
+        });
+
+        if (!no_callstack) {
+          std::vector<target_ulong> current_callstack(10);
+          int callstacksize =
+              get_functions(current_callstack.data(),
+                          static_cast<int>(current_callstack.size()), cpu);
+          current_callstack.resize(callstacksize);
+          e.callstack = std::move(current_callstack);
+        }
+
+    }
+    //logging
+    logEvent(e, outfp);
+}
+
+
 void *plugin_self;
 bool init_plugin(void *self) {
  
@@ -784,8 +838,10 @@ bool init_plugin(void *self) {
 
 
     panda_require("sysevent");
+
     PPP_REG_CB("sysevent", on_sysevent_enter, external_event_enter);
     PPP_REG_CB("sysevent", on_sysevent_exit, external_event_exit);
+    PPP_REG_CB("sysevent", on_sysevent_notif, external_event_notif);
 
     panda_arg_list *args = panda_get_args("systaint");
 
@@ -929,16 +985,19 @@ void uninit_plugin(void *self) {
 
     // handle unterminated events
 
-    cout << "UNTERMINATED " << endl;
+    if(!events.curr_events.empty()){
+        cout << "UNTERMINATED " << endl;
 
-    for(const auto& thread_event : events.curr_events){
-        //const auto& t = thread_event.first;
-        const auto& evs = thread_event.second;
+        for(const auto& thread_event : events.curr_events){
+            //const auto& t = thread_event.first;
+            const auto& evs = thread_event.second;
 
-        for(const auto& e : evs){
-            std::cout << e->toString() << std::endl;
-            logEvent(*e, outfp);
+            for(const auto& e : evs){
+                std::cout << e->toString() << std::endl;
+                logEvent(*e, outfp);
+            }
         }
+
     }
 
     //printOutDeps();

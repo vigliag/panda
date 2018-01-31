@@ -165,8 +165,8 @@ bool init_plugin(void *self) {
     panda_arg_list *args = panda_get_args("procinfodump");
     const char* filename = panda_parse_string_opt(args, "file", "pids.txt", "file where to take the targets from");
 
-    Target exampletarget(47567844, 2336);
-    target_queue.push(exampletarget);
+    //Target exampletarget(47567844, 2336);
+    //target_queue.push(exampletarget);
 
     parseTargets(filename);
 

@@ -49,7 +49,8 @@ enum class EventKind {
   unknown=0,
   syscall,
   encoding,
-  external
+  external,
+  notification
 };
 
 /* TODO
@@ -88,7 +89,7 @@ public:
 
         if(it_after == knownDataPointers.begin()){
             //can happen if .begin() == .end(), or if there's no smaller pointer
-            puts("discard (no lower)");
+            //puts("discard (no lower)");
             return std::optional<KnownDataPointer>();
         }
 
@@ -97,7 +98,7 @@ public:
         auto closest_known_data_pointer = *it_after;
         if (addr - closest_known_data_pointer.pointer >= 0x1000){
             //discard as the first candidate pointer is too distant
-            puts("discard (too distant)");
+            //puts("discard (too distant)");
             return std::optional<KnownDataPointer>();
         }
 
@@ -114,6 +115,7 @@ struct Event {
     uint32_t ret_addr = 0;
     uint32_t entrypoint = 0;
     uint32_t label = 0;
+    bool discard = false;
 
     std::vector<uint32_t> tags;
     std::vector<target_ulong> callstack;
@@ -136,6 +138,8 @@ struct Event {
             res << "external "; break;
         case EventKind::unknown:
             res << "unknown "; break;
+        case EventKind::notification:
+            res << "notification"; break;
         }
         res << "id " << getLabel() << " ep: " << entrypoint
             << " started " << started << " thread " << thread.second;

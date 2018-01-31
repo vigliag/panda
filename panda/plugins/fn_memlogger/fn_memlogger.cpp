@@ -38,6 +38,7 @@ using Callid = InstrCnt;
 
 static std::ofstream outfstream;
 
+
 // Stores informations about a called function.
 struct CallInfo {
     std::map<Address, uint8_t> writeset;
@@ -59,7 +60,10 @@ static std::set<Asid> tracked_asids;
 static std::map<Funid, int> n_calls;
 static std::unordered_map<Callid, CallInfo> call_infos;
 
-const int calls_to_monitor_per_fn_entrypoint = 5;
+static int calls_to_monitor_per_fn_entrypoint = 5;
+static bool record_memory_accesses = true;
+static uint64_t target_end_count = 0;
+
 
 // Gets the current (topmost) stack entry from callstack_instr
 CallstackStackEntry getCurrentEntry(CPUState *cpu){
@@ -78,10 +82,10 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         return;
     }
 
-    // Get the two latest entries on the current stack.
+    // Get the latest entries on the current stack.
     // The topmost will be this call
 
-    std::vector<CallstackStackEntry> entries(5);
+    std::vector<CallstackStackEntry> entries(10);
     int n_entries = get_call_entries(entries.data(),
                                      static_cast<int>(entries.size()), cpu);
     entries.resize(n_entries);
@@ -318,7 +322,7 @@ void on_ret(CPUState *cpu, target_ulong entrypoint, uint64_t callid, uint32_t sk
     out["nreads"] = call.reads;
     out["nwrites"] = call.writes;
 
-    cout << out.dump() << std::endl;
+    //cout << out.dump() << std::endl;
     outfstream << out.dump() << std::endl;
 
     call_infos.erase(callid);
@@ -355,6 +359,12 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
 
     auto& call = call_infos[entry.call_id];
     call.block_executions[tb->pc]++;
+
+    auto instr_count = rr_get_guest_instr_count();
+    if(target_end_count && instr_count > target_end_count){
+        rr_end_replay_requested = 1;
+    }
+
     return 0;
 }
 
@@ -389,6 +399,9 @@ bool init_plugin(void *self) {
     if (args != NULL) {
         const char* asidss = panda_parse_string(args, "asids", "list of address space identifiers to track");
         tracked_asids = parse_addr_list(asidss);
+        target_end_count = panda_parse_uint64_opt(args, "endat", 0, "instruction count when to end the replay");
+        calls_to_monitor_per_fn_entrypoint = static_cast<int>(panda_parse_uint32_opt(args, "call_limit", 5, "how many calls to monitor per entrypoint"));
+        record_memory_accesses = !panda_parse_bool_opt(args, "no_memory_accesses", "don't record reads and writes");
     }
 
     for(const target_ulong asid: tracked_asids){

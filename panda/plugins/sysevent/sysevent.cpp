@@ -15,7 +15,7 @@
 
 extern "C" {
 #include "sysevent.h"
-bool init_plugin(void *);
+bool init_plugin(void *);   
 void uninit_plugin(void *);
 int guest_hypercall_callback(CPUState *cpu);
 
@@ -32,7 +32,7 @@ PPP_CB_BOILERPLATE(on_sysevent_notif);
 
 #define HYPERCALL_SYSCALL_ENTER 1
 #define HYPERCALL_SYSCALL_EXIT 2
-#define HYPERCALL_NOTIF 3
+#define HYPERCALL_NOTIF 4
 #define SYSTAINT_MAGIC 0xffaaffcc
 
 struct ProcessData {
@@ -108,10 +108,13 @@ void hypercall_event_listener(CPUState *cpu){
     if(!(env->regs[R_EAX] == SYSTAINT_MAGIC || env->regs[R_EAX] == 0x42424242))
         return;
 
-    //printf("HYPERCALL " TARGET_FMT_ld " " TARGET_FMT_ld " " TARGET_FMT_ld "\n",
-    //     env->regs[R_EBX], env->regs[R_ECX], env->regs[R_EDX]);
+    printf("HYPERCALL " TARGET_FMT_ld " " TARGET_FMT_ld " " TARGET_FMT_ld "\n",
+         env->regs[R_EBX], env->regs[R_ECX], env->regs[R_EDX]);
 
     uint32_t cuckoo_event = env->regs[R_ECX];
+    uint32_t pointer = env->regs[R_EDX];
+    uint32_t len = env->regs[R_ESI];
+
     const char* etype = nullptr;
 
     switch (env->regs[R_EBX]) {
@@ -128,7 +131,10 @@ void hypercall_event_listener(CPUState *cpu){
         break;
         case HYPERCALL_NOTIF:
             etype = "notif";
-            PPP_RUN_CB(on_sysevent_notif, cpu, cuckoo_event);
+            PPP_RUN_CB(on_sysevent_notif, cpu, cuckoo_event, pointer, len);
+        break;
+        default:
+            etype = "error";
         break;
     }
 

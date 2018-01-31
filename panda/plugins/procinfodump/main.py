@@ -7,6 +7,8 @@ from rekall import session
 from rekall import plugins  # required
 from rekall import addrspace
 from rekall.plugins.addrspaces import standard
+from rekall.plugins.overlays.windows import pe_vtypes
+
 import json
 from IPython import embed
 import IPython.core.page
@@ -138,6 +140,32 @@ def getstacks(eprocess):
 def processes():
     return s.plugins.pslist().collect()
 
+def findExportsFromLoadedDLLs(pid):
+    p = process(pid)
+    eprocess = p['_EPROCESS']
+    modules = eprocess.get_load_modules()
+
+    exports = {}
+    for i, mod in enumerate(modules):
+        pe = pe_vtypes.PE(address_space=mod.obj_vm,
+                          session=s, image_base=mod.DllBase)
+
+        for _, func_pointer, func_name, ordinal in pe.ExportDirectory():
+            function_name = func_name or ordinal or ''
+            exports[func_pointer.v()] = (mod, func_pointer, function_name)
+
+    return exports
+
+def dumpExports(pid):
+    exports = findExportsFromLoadedDLLs(pid)
+    filename = "process.{}.AsDLLExports.csv".format(pid)
+    with open(filename, "w") as f:
+        for pointer, tuple in exports.items():
+            mod, fnp, fnameb = tuple
+            modname = str(mod.BaseDllName)
+            fnoffset = pointer - mod.base
+            fname = str(fnameb)
+            f.write("{:#010x}, {}, {}, {}\n".format(pointer, fname, modname, fnoffset))
 
 def fullinfo(pid):
     p = process(pid)
@@ -183,6 +211,8 @@ def dumpFullInfo(pid):
 
     filename = "processInfo.{}.{}.json".format(pid, rrcount)
     json.dump(infos, open(filename, "w"), indent=2)
+
+    dumpExports(pid)
     print("dumped {}".format(filename))
 
 
