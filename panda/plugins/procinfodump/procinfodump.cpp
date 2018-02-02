@@ -17,6 +17,9 @@
 
 #include <pybind11/embed.h> // everything needed for embedding
 
+#include "callstack_instr/callstack_instr.h"
+#include "callstack_instr/callstack_instr_ext.h"
+
 extern ram_addr_t ram_size;
 
 namespace py = pybind11;
@@ -47,6 +50,15 @@ std::priority_queue<Target, std::vector<Target>, CompareTarget> target_queue;
 inline hwaddr roundUpToPageSize(hwaddr addr, hwaddr pagesize) {
     const hwaddr pagemask = ~(pagesize - 1);
     return (addr % pagesize > 0) ? ((addr + pagesize) & pagemask) : addr;
+}
+
+std::vector<target_ulong> pandapy_callstack(){
+    std::vector<target_ulong> current_callstack(10);
+    int callstacksize =
+        get_functions(current_callstack.data(),
+                    static_cast<int>(current_callstack.size()), current_cpu);
+    current_callstack.resize(callstacksize);
+    return current_callstack;
 }
 
 py::bytes pandapy_read_physical(hwaddr start, hwaddr length) {
@@ -99,6 +111,7 @@ PYBIND11_EMBEDDED_MODULE(panda, m) {
     m.def("read", &pandapy_read_physical, "reads length from address");
     m.def("memory_size", []() { return ram_size; });
     m.def("get_rr_count", &rr_get_guest_instr_count);
+    m.def("callstack", &pandapy_callstack, "reads the current callstack");
 }
 
 py::module pymodule;
@@ -157,6 +170,7 @@ void parseTargets(const std::string& file){
 
 bool init_plugin(void *self) {
     plugin_self = self;
+    panda_require("callstack_instr");
 
     panda_cb pcb;
     pcb.before_block_exec = before_block_exec;
@@ -164,11 +178,14 @@ bool init_plugin(void *self) {
 
     panda_arg_list *args = panda_get_args("procinfodump");
     const char* filename = panda_parse_string_opt(args, "file", "pids.txt", "file where to take the targets from");
+    uint64_t breakpoint = panda_parse_uint64_opt(args, "break", 0, "set a breakpoint, execute a shell and exit");
 
-    //Target exampletarget(47567844, 2336);
-    //target_queue.push(exampletarget);
-
-    parseTargets(filename);
+    if(breakpoint){
+        Target exampletarget(breakpoint, 0);
+        target_queue.push(exampletarget);
+    } else {
+        parseTargets(filename);
+    }
 
     py::initialize_interpreter(true);
     pymodule = py::module::import("main");

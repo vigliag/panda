@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <unordered_map>
+#include <map>
 
 // TODO(vigliag) is it worth including panda/plugin.h 
 // in here in order to get target_ulong?
@@ -62,6 +63,9 @@ class TaintLocation {
 
     inline const std::set<int> &getLabels() { return labels_; }
 
+    friend bool operator== (const TaintLocation &t1, const TaintLocation &t2){
+        return t1.labels_ == t2.labels_;
+    }
   private:
     std::set<Label> labels_;
 };
@@ -111,6 +115,117 @@ class ShadowMemory {
   private:
     shadowmemory_t mem_;
 };
+
+
+/**
+ * @brief The ShadowMemory class is used to represent the taint status for the
+ * emulated memory.
+ * It uses a shadowmemory_t (map of taint locations) as underlying storage
+ */
+/* TODO COMPLETE
+class CondensedShadowMemory {
+    struct RangeEntry {
+        uint32_t addr;
+        uint32_t length;
+        TaintLocation tlocation;
+    };
+
+    void addToEntry(target_ulong addr, int label){
+        auto &entry = mem_[addr];
+        entry.length = 1;
+        entry.addr = addr;
+        entry.tlocation.addLabel(label);
+    }
+
+    void removeFromEntry(target_ulong addr, RangeEntry& existing){
+        if (existing.addr == addr) {
+            if(existing.length == 1){
+                return; //it will simply be overwritten
+            }
+            //move one step forward
+            existing.addr = addr + 1;
+            mem_[addr + 1] = existing;
+            return;
+        }
+
+        if(existing.addr + existing.length == addr){
+            //make shorter by one
+            existing.length -= 1;
+            return;
+        }
+
+        //it is in the middle
+        auto oldlen = existing.length;
+        existing.length = addr - existing.addr; //resize first part
+
+        //copy first part to second part
+        auto& secondpart = mem_[addr + 1];
+        secondpart.addr = addr + 1;
+        secondpart.length = (existing.addr + oldlen) - (addr+ 1);
+    }
+
+  public:
+    explicit CondensedShadowMemory() {}
+
+
+
+    // Add a taint label to at the specified memory address
+    void addLabel(target_ulong addr, int label) {
+
+        auto it_after = mem_.upper_bound(addr);
+        if(it_after == mem_.begin()){
+            //can happen if .begin() == .end(), or if there's no smaller pointer
+            addToEntry(addr, label);
+        }
+
+        it_after--;
+        auto &firstLower_tuple = *it_after;
+        auto &firstLower_addr = firstLower_tuple.first;
+        auto &firstLower_entry = firstLower_tuple.second;
+
+        assert(firstLower_addr == firstLower_entry.addr);
+
+        if(firstLower_addr <= addr && addr < (firstLower_addr + firstLower_entry.length) ){
+            if (firstLower_entry.tlocation.hasLabel(label)){
+                return;
+            } else {
+                removeFromEntry(addr, firstLower_entry);
+                addToEntry(addr, label);
+                return;
+            }
+        }
+
+        if (mem_.find(addr) == mem_.end()) {
+            mem_[addr] = std::shared_ptr<TaintLocation>(new TaintLocation);
+        }
+        mem_[addr]->addLabel(label);
+    }
+
+    // Taint propagation primitives
+    void set(const TaintLocation *loc, target_ulong addr);
+    void clear(target_ulong addr, unsigned int size = 1);
+
+    // Check if a memory address is tainted
+    inline bool isTaintedAddress(target_ulong addr) const {
+        return mem_.find(addr) != mem_.end() && mem_.at(addr)->isTainted();
+    }
+
+    // Check if a memory address has a taint label
+    inline bool hasLabel(target_ulong addr, int label) const {
+        return mem_.find(addr) != mem_.end() && mem_.at(addr)->hasLabel(label);
+    }
+
+    void combine(const TaintLocation *loc, target_ulong addr);
+
+    // Get the taint status of a (tainted) memory address
+    inline TaintLocation *getTaintLocation(target_ulong addr) const {
+        return mem_.at(addr).get();
+    }
+
+  private:
+    std::map<target_ulong, RangeEntry> mem_;
+};
+*/
 
 /**
  * @brief The ShadowRegister class represents the tainted status of a CPU

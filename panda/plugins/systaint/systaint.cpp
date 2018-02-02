@@ -948,6 +948,7 @@ bool init_plugin(void *self) {
             fclose(analysisInfoFile);
         }
 
+        cout << "exec info file " << analysisInfoName << std::endl;
     }
 
     for(const auto&i : monitored_encoding_calls){

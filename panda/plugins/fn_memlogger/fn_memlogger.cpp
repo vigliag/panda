@@ -188,6 +188,7 @@ struct bufferinfo {
     target_ulong len = 0;
     float entropy = -1;
     int printableChars = 0;
+    int nulls = 0;
 
     std::string toString() const {
         std::stringstream ss;
@@ -201,6 +202,7 @@ struct bufferinfo {
         ret["len"] = len;
         ret["entropy"] = entropy;
         ret["printableChars"] = printableChars;
+        ret["nulls"] = nulls;
         return ret;
     }
 };
@@ -234,6 +236,9 @@ std::vector<bufferinfo> toBufferInfos(std::map<target_ulong, uint8_t>& addrset){
         temp.len++;
         if(std::isprint(data)){
             temp.printableChars++;
+        }
+        if(data == 0){
+            temp.nulls++;
         }
         ec.add(data);
 
