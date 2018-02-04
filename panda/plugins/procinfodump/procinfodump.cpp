@@ -16,6 +16,7 @@
 #include <string>
 
 #include <pybind11/embed.h> // everything needed for embedding
+#include <pybind11/stl.h>
 
 #include "callstack_instr/callstack_instr.h"
 #include "callstack_instr/callstack_instr_ext.h"
@@ -170,7 +171,9 @@ void parseTargets(const std::string& file){
 
 bool init_plugin(void *self) {
     plugin_self = self;
+
     panda_require("callstack_instr");
+    assert(init_callstack_instr_api());
 
     panda_cb pcb;
     pcb.before_block_exec = before_block_exec;

@@ -12,6 +12,7 @@
 #include <string>
 #include <unordered_map>
 #include <map>
+#include "sparsepp/spp.h"
 
 // TODO(vigliag) is it worth including panda/plugin.h 
 // in here in order to get target_ulong?
@@ -71,7 +72,7 @@ class TaintLocation {
 };
 
 using shadowmemory_t =
-    std::unordered_map<target_ulong, std::shared_ptr<TaintLocation>>;
+    spp::sparse_hash_map<target_ulong, std::shared_ptr<TaintLocation>>;
 
 /**
  * @brief The ShadowMemory class is used to represent the taint status for the
@@ -122,7 +123,7 @@ class ShadowMemory {
  * emulated memory.
  * It uses a shadowmemory_t (map of taint locations) as underlying storage
  */
-/* TODO COMPLETE
+/*
 class CondensedShadowMemory {
     struct RangeEntry {
         uint32_t addr;
@@ -169,6 +170,7 @@ class CondensedShadowMemory {
 
 
 
+
     // Add a taint label to at the specified memory address
     void addLabel(target_ulong addr, int label) {
 
@@ -202,7 +204,10 @@ class CondensedShadowMemory {
     }
 
     // Taint propagation primitives
-    void set(const TaintLocation *loc, target_ulong addr);
+    void set(const TaintLocation *loc, target_ulong addr){
+
+    };
+
     void clear(target_ulong addr, unsigned int size = 1);
 
     // Check if a memory address is tainted
@@ -226,7 +231,6 @@ class CondensedShadowMemory {
     std::map<target_ulong, RangeEntry> mem_;
 };
 */
-
 /**
  * @brief The ShadowRegister class represents the tainted status of a CPU
  *  register. It is implemented as an array of TaintLocation.

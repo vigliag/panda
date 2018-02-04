@@ -181,11 +181,18 @@ void logEvent(const Event& event, FILE* filepointer){
         assert(filepointer);
 
         std::string res = pbEvent->SerializeAsString();
-        size_t buffer_size = res.size();
-
-        fwrite(&buffer_size, sizeof(buffer_size), 1, filepointer);
-        fwrite(res.data(), buffer_size, 1, filepointer);
-        fflush(filepointer);
+        if(!res.empty()){
+            size_t buffer_size = res.size();
+            if(buffer_size < 100 * 1000 * 1000){ //only write if less than 100mb
+                fwrite(&buffer_size, sizeof(buffer_size), 1, filepointer);
+                fwrite(res.data(), buffer_size, 1, filepointer);
+                fflush(filepointer);
+            } else {
+                fprintf(stderr, "ERROR serializing %s buffer too big \n", event.toString().c_str());
+            }
+        } else {
+            fprintf(stderr, "ERROR serializing %s \n", event.toString().c_str());
+        }
 
         delete pbEvent;
     }
