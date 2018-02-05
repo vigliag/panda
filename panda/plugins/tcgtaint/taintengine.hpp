@@ -26,7 +26,19 @@ enum RegisterKind : int { global = 0, temporary = 1 };
 //
 class TaintEngine {
   public:
-    explicit TaintEngine(){}
+    explicit TaintEngine(){
+        //WARNING TODO(vigliag): THIS IS A VERY BAD HACK, we are telling it to always
+        //consider esp and ebp untainted
+        //also: these are hardcoded for x86
+        //also: the register cache may create problems
+        cpuregs_[1].ignore(); //no idea what they are
+        cpuregs_[2].ignore(); //no idea what they are
+        cpuregs_[11].ignore(); //esp
+        cpuregs_[12].ignore(); //ebp
+        for(int i=13; i<=15; i++){
+            cpuregs_[i].ignore(); //segments bases
+        }
+    }
 
     // Enable/disable the taint propagation engine
     // void setEnabled(bool status);
@@ -64,6 +76,8 @@ class TaintEngine {
         case RegisterKind::temporary:
             return regcache_tmp_[regno];
         case RegisterKind::global:
+            //TODO(vigliag) REALLY BAD HACK FOR IGNORING ESP and similars
+            if(cpuregs_[regno].isIgnored()){return false;}
             return regcache_cpu_[regno];
         }
         return 0;

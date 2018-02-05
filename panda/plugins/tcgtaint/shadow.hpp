@@ -281,6 +281,9 @@ class ShadowRegister {
     }
 
     void getAllLabels(std::set<Label>* out) const {
+        if(ignored){
+            return;
+        }
         for (int i = 0; i < size_; i++) {
             for (const Label l : reg_[i].getLabels()) {
                 out->insert(l);
@@ -326,8 +329,17 @@ class ShadowRegister {
         }
     }
 
+    void ignore(){
+        ignored = true;
+    }
+
+    bool isIgnored() const{
+        return ignored;
+    }
+
   private:
     int size_;
+    bool ignored = false; //an ignored register is always untainted
     TaintLocation *reg_;
     std::string name_;
 };

@@ -545,8 +545,13 @@ int tcg_global_mem_new_internal(TCGType type, TCGv_ptr base,
        NOTE(vigliag) previous qtrace assertion `assert(type != TCG_TYPE_I64);` was removed
        it was failing because of the new intel MPX registers such as bnd0_lb.
     */
-    if(qtrace_taint_instrumentation_enabled)
+
+    //TODO this is never called because tcgtaint is not yet inited when we get here
+    printf("GLOBAL REGISTER %d at %s \n", s->nb_globals, name);
+
+    if(qtrace_taint_instrumentation_enabled){
         notify_taint_regalloc(s->nb_globals, name);
+     }
 #endif
 
     if (!base_ts->fixed_reg) {

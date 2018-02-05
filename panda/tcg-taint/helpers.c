@@ -86,8 +86,10 @@ void helper_qtrace_combine3(target_ulong dst, target_ulong op1,
                             target_ulong op2) {
     bool dsttmp = register_is_temp(dst);
 
-    /* Clear destination first! */
-    notify_taint_clearR(dsttmp, REG_IDX(dsttmp, dst));
+    // Clear destination if it's not also one of the operands
+    if( op1 != dst && op2 != dst){
+        notify_taint_clearR(dsttmp, REG_IDX(dsttmp, dst));
+    }
 
     /* Combine op1 with dst */
     if (op1 != dst) {

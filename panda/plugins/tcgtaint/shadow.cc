@@ -8,6 +8,7 @@
 #include <assert.h>
 
 void ShadowRegister::set(const ShadowRegister &other) {
+    if(other.ignored) return;
     for (int i = 0; i < std::min(size_, other.size_); i++) {
         reg_[i].set(other.reg_[i]);
     }
@@ -15,6 +16,7 @@ void ShadowRegister::set(const ShadowRegister &other) {
 
 void ShadowRegister::combine(const ShadowRegister &other) {
     //TODO combine is implemented wrong, it shouldn't work byte-per-byte at all
+    if(other.ignored) return;
     for (int i = 0; i < std::min(size_, other.size_); i++) {
         reg_[i].combine(other.reg_[i]);
     }
@@ -31,6 +33,9 @@ void ShadowRegister::set(const TaintLocation *loc, int offset) {
 }
 
 bool ShadowRegister::isTainted() const {
+    if(ignored){
+        return false;
+    }
     for (int i = 0; i < size_; i++) {
         if (reg_[i].isTainted()) {
             return true;
@@ -41,11 +46,17 @@ bool ShadowRegister::isTainted() const {
 }
 
 bool ShadowRegister::isTaintedByte(unsigned int offset) const {
+    if(ignored){
+        return false;
+    }
     assert(offset < size_);
     return reg_[offset].isTainted();
 }
 
 bool ShadowRegister::hasLabel(int label) const {
+    if(ignored){
+        return false;
+    }
     for (int i = 0; i < size_; i++) {
         if (reg_[i].hasLabel(label)) {
             return true;
@@ -60,8 +71,8 @@ void ShadowMemory::set(const TaintLocation *loc, target_ulong addr) {
     }
 
     mem_[addr]->set(*loc);
-    if (mem_.size() % 1000 == 0) {
-        INFO("%d memory locations tainted", mem_.size());
+    if (mem_.size() % 10000 == 0) {
+        INFO("STATS %d memory locations tainted", mem_.size());
     }
 }
 

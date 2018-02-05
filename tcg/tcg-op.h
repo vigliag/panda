@@ -437,11 +437,17 @@ static inline void tcg_gen_and_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 
 static inline void tcg_gen_or_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_or_i32, ret, arg1, arg2);
+#endif
     tcg_gen_op3_i32(INDEX_op_or_i32, ret, arg1, arg2);
 }
 
 static inline void tcg_gen_xor_i32(TCGv_i32 ret, TCGv_i32 arg1, TCGv_i32 arg2)
 {
+#ifdef CONFIG_QTRACE_TAINT
+    tcg_gen_qtrace_combine3(INDEX_op_xor_i32, ret, arg1, arg2);
+#endif
     tcg_gen_op3_i32(INDEX_op_xor_i32, ret, arg1, arg2);
 }
 

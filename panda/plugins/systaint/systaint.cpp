@@ -634,6 +634,10 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         return 0;
     }
 
+    if(debug_logs){
+        fprintf(stderr, "READ %d (%p) of %d bytes \n", addr, (void*)panda_virt_to_phys(cpu, addr), size);
+    }
+
     auto thread = getFQThreadId(cpu);
     auto p_current_event = events.getEvent(thread);
 
@@ -659,10 +663,6 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                 pointers_read++;
             }
         }
-    }
-
-    if(debug_logs){
-        fprintf(stderr, "READ %d (%p) of %d bytes \n", addr, (void*)panda_virt_to_phys(cpu, addr), size);
     }
 
     for(target_ulong i=0; i< size; i++){

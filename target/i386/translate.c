@@ -4615,7 +4615,10 @@ static target_ulong disas_insn(CPUX86State *env, DisasContext *s,
                    going to move the source and destinations (that in this case
                    are identical) into *different* temporary registers, thus we
                    won't be able to realize their are actually the same
-                   register. */
+                   register.
+
+                   Note xor reg, reg is already handled above as optimization and
+                   turned into mov reg zero */
                 if (reg == opreg && (op == OP_SBBL || op == OP_SUBL)) {
                     tcg_gen_qtrace_clearR(cpu_regs[reg]);
                 }

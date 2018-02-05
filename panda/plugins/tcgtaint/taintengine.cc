@@ -11,7 +11,7 @@
 
 #include "logging.hpp"
 
-#define REGCHR(x) ((x) ? 't' : 'c')
+#define REGCHR(x) ((x) ? 't' : 'g')
 #define REGNAME(obj)                                                           \
     ((obj)->getCName() ? (obj)->getCName() : "noname")
 #define REGTAINT(obj) ((obj)->isTainted() ? 'T' : 'C')
@@ -59,7 +59,7 @@ void TaintEngine::setTaintedRegister(int label, RegisterKind istmp,
           REGNAME(reg), label);
 
     reg->set(label);
-    _updateRegisterCache(istmp, regno, true);
+    _updateRegisterCache(istmp, regno, reg->isTainted());
 }
 
 bool TaintEngine::isTaintedRegister(RegisterKind tmp, target_ulong regno,
@@ -103,7 +103,7 @@ bool TaintEngine::isTaintedMemory(target_ulong addr, unsigned int size) const {
 
 void TaintEngine::clearRegister(RegisterKind tmp, target_ulong regno) {
     if (!isTaintedRegister(tmp, regno)) {
-        // Nothing to do
+        TRACE("Clearing R%c(%.2x), already clear", REGCHR(tmp), regno);
         return;
     }
 
@@ -164,7 +164,8 @@ void TaintEngine::moveR2R(RegisterKind srctmp, target_ulong src,
 void TaintEngine::combineR2R(RegisterKind srctmp, target_ulong src,
                              RegisterKind dsttmp, target_ulong dst) {
     if (!isTaintedRegister(srctmp, src)) {
-        // Nothing to do
+        TRACE("Taint combining R%c(%.2x C) -> R%c(%.2x _) ignored",
+              REGCHR(srctmp), src, REGCHR(dsttmp), dst);
         return;
     }
 
@@ -186,7 +187,7 @@ void TaintEngine::moveM2R(target_ulong addr, RegisterKind addr_reg_kind,
     assert(size <= 8);
     ShadowRegister *regobj = getRegister(regtmp, reg);
 
-    TRACE("M2R M(%.8x) -> R%c(%.2x %s), size=%d", addr, REGCHR(regtmp), reg,
+    TRACE("M2R M(%.8x reg %.2x) -> R%c(%.2x %s), size=%d", addr, addr_reg, REGCHR(regtmp), reg,
           REGNAME(regobj), size);
 
     for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
@@ -322,6 +323,7 @@ void TaintEngine::combineR2M(RegisterKind regtmp, target_ulong reg,
 }
 
 void TaintEngine::clearTempRegisters() {
+    TRACE("Clearing temp registers at the end of the block");
     for (int regno = 0; regno < NUM_TMP_REGS; regno++) {
         if (regcache_tmp_[regno]) {
             tmpregs_[regno].clear();
