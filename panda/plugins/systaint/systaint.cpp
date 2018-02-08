@@ -314,11 +314,13 @@ void on_syscall_enter(CPUState *cpu, const SyscallDef& sc, SysCall call){
       cout << "SYSENTER ENCOUNTERED " << sc.callno << " " << sc.name
            << " while current_event was" << current_event->toString() << endl;
 
+      /* TODO: uncomment to allow syscalls to interrupt encoding function calls
       if(current_event->kind == EventKind::encoding){
           current_event->discard = true;
       }
 
        events.closeEvent(thread, *current_event);
+       */
     }
 
     cout << "SYSENTER " << sc.callno << " " << sc.name << endl;

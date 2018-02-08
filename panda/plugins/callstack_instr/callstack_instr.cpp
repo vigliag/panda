@@ -353,6 +353,12 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
 // After a block executes, we check if its last instruction was a CALL
 // if it is, then we add a new frame to our shadow stack
 int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
+    static int justEnabled = 1;
+    if(justEnabled){
+        justEnabled = 0;
+        return 1;
+    }
+
     assert(tb);
     CPUArchState* env = (CPUArchState*)cpu->env_ptr;
     instr_type tb_type = call_cache.at(tb->pc);
@@ -369,8 +375,8 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         stackid current_stackid = get_stackid(cpu);
 
         stack_entry se;
-        se.function = pc;
-        se.return_address = tb->pc + tb->size;
+        se.function = pc; //the program counter has been updated and it is at the beginning of the called function
+        se.return_address = tb->pc + tb->size; //the call instruction is the last of its basic block
         se.kind = tb_type;
         se.call_id = rr_get_guest_instr_count();
         se.called_by = callstacks[current_stackid].empty() ? 
@@ -387,6 +393,12 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
     }
 
     return 1;
+}
+
+uint64_t get_current_callid(CPUState* cpu){
+    std::vector<stack_entry> &v = callstacks[get_stackid(cpu)];
+    if (v.empty()) return 0;
+    return v.back().call_id;
 }
 
 // Public interface implementation
@@ -468,10 +480,14 @@ void get_prog_point(CPUState* cpu, prog_point *p) {
 
     // Get address space identifier
     target_ulong asid = panda_current_asid(ENV_GET_CPU(env));
+
     // Lump all kernel-mode CR3s together
 
-    if(!in_kernelspace(env))
+    if(!in_kernelspace(env)){
         p->cr3 = asid;
+    } else {
+        p->cr3 = 0;
+    }
 
     // Try to get the caller
     int n_callers = 0;

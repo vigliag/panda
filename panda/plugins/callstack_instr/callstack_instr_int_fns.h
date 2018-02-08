@@ -24,4 +24,6 @@ void pandalog_callstack_free(Panda__CallStack *cs);
 
 int get_call_entries(CallstackStackEntry* entries, int n, CPUState *cpu);
 
+uint64_t get_current_callid(CPUState* cpu);
+
 #endif

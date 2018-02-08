@@ -447,3 +447,5 @@ build/ppc-softmmu/panda/plugins/pri
 build/x86_64-softmmu/panda/plugins/osi
 linux-headers/asm-generic
 build/arm-softmmu/panda/plugins/taint2
+panda/plugins/tcgtaint/sparsepp
+panda/plugins/stringsearch2
