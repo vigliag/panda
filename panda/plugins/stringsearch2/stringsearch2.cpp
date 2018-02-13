@@ -263,7 +263,6 @@ int stringsearch2_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     return 0;
 }
 
-
 bool init_plugin(void *self) {
     panda_cb pcb;
 
@@ -274,6 +273,8 @@ bool init_plugin(void *self) {
     CHUNK_LEN = panda_parse_uint64_opt(args, "chunklen", 8, "length of each chunk");
     NCHUNKS = panda_parse_uint64_opt(args, "nchunks", 10, "number of chunks per search");
     include_kernel_addrs = panda_parse_bool(args, "include_kernel_addrs");
+    n_callers = panda_parse_uint32_opt(args, "callers", 32, "depth of callstack for matches");
+    if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
 
     // collect raw searches from file list
     std::vector<std::string> search_names;
@@ -307,29 +308,30 @@ bool init_plugin(void *self) {
     size_t nrawsearches = raw_searches.size();
 
     // search in chunks
+    int added_count = 0;
     for(size_t i=0; i< nrawsearches; i++){
         auto& buff = raw_searches[i];
 
-        for(size_t start=0; start < buff.length() && start < CHUNK_LEN * 10; start += CHUNK_LEN){
+        for(size_t start=0; start < buff.length() && start < CHUNK_LEN * NCHUNKS; start += CHUNK_LEN){
             SearchInfo si;
             si.buffer = buff.substr(start, CHUNK_LEN);
             si.name = search_names[i];
             si.name.append("+");
             si.name.append(std::to_string(start));
 
-            cout << si.name << " " << si.buffer.length() << " ";
+            cout << added_count << " " << si.name << " " << si.buffer.length() << " ";
             for(size_t j=0; j< si.buffer.length(); ++j){
                 printf("%02x", (unsigned char) si.buffer[j]);
             }
             cout << std::endl;
+            added_count++;
             searches.push_back(si);
         }
     }
 
     cout << "Added a total of " << searches.size() << " chunks" << std::endl;
 
-    n_callers = panda_parse_uint32_opt(args, "callers", 8, "depth of callstack for matches");
-    if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
+
 
     std::string outfilename(filelist_file);
     outfilename.append(".result");

@@ -57,14 +57,15 @@ PPP_PROT_REG_CB(on_ret);
 
 PPP_PROT_REG_CB(on_call2);
 PPP_PROT_REG_CB(on_ret2);
+PPP_PROT_REG_CB(on_forcedret);
 }
 
 PPP_CB_BOILERPLATE(on_call);
 PPP_CB_BOILERPLATE(on_ret);
 
 PPP_CB_BOILERPLATE(on_call2);
-PPP_CB_BOILERPLATE(on_ret2)
-
+PPP_CB_BOILERPLATE(on_ret2);
+PPP_CB_BOILERPLATE(on_forcedret);
 
 //Capstone handles
 csh cs_handle_32;
@@ -341,9 +342,11 @@ int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     std::advance(stack_it, 1);
     auto found_element_it = stack_it.base();
 
-    //for(auto it = found_element_it; it != v.end(); it++){
-        // call on_discarded function
-    //}
+    int depth_ctr = 0;
+    for(auto it = found_element_it; it != v.end(); it++){
+        depth_ctr++;
+        PPP_RUN_CB(on_forcedret, cpu, it->function, it->call_id, depth_ctr);
+    }
 
     v.erase(found_element_it, v.end());
 

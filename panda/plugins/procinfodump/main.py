@@ -8,6 +8,7 @@ from rekall import plugins  # required
 from rekall import addrspace
 from rekall.plugins.addrspaces import standard
 from rekall.plugins.overlays.windows import pe_vtypes
+import os
 
 import json
 from IPython import embed
@@ -101,8 +102,15 @@ def create_session(filename=None):
     return s
 
 
-def dump_process(pid):
-    print(s.plugins.dlldump(pid))
+def dumpProcess(pid):
+    dirname = "dump_{}".format(pid)
+    try:
+        os.mkdir(dirname)
+    except Exception as e:
+        print(e)
+    for i in s.plugins.dlldump(pid, dump_dir=dirname).collect():
+       print(i)
+    print(s.plugins.memdump(pid, dump_dir=dirname))
 
 
 def vads(pid):
@@ -213,6 +221,7 @@ def dumpFullInfo(pid):
     json.dump(infos, open(filename, "w"), indent=2)
 
     dumpExports(pid)
+    dumpProcess(pid)
     print("dumped {}".format(filename))
 
 

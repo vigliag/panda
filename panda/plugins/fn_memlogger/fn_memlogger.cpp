@@ -85,7 +85,7 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
     // Get the latest entries on the current stack.
     // The topmost will be this call
 
-    std::vector<CallstackStackEntry> entries(10);
+    std::vector<CallstackStackEntry> entries(16);
     int n_entries = get_call_entries(entries.data(),
                                      static_cast<int>(entries.size()), cpu);
     entries.resize(n_entries);

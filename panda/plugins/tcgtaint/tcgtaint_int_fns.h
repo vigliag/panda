@@ -15,6 +15,7 @@ void tcgtaint_physical_memory_labels_copy(target_ulong addr, uint32_t *out);
 size_t tcgtaint_get_physical_memory_labels_count(target_ulong addr);
 bool tcgtaint_is_virtual_memory_tainted(target_ulong addr);
 
+void tcgtaint_set_taint_dereference(bool status);
 void tcgtaint_set_taint_status(bool status);
 bool tcgtaint_is_taint_instrumentation_on(void);
 bool tcgtaint_is_taint_enabled(void);

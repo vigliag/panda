@@ -15,6 +15,7 @@
 #include <libgen.h>
 #include <json.hpp> //nlohmann json
 #include <unistd.h> //getcwd
+#include <fstream>
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
@@ -54,10 +55,6 @@ using Asid = target_ulong;
 using Address = target_ulong;
 using Tag = uint32_t;
 using Label = uint32_t;
-
-std::map<Address, std::string> address_map;
-
-
 
 // Opened filepointer for writing the collected data
 static FILE* outfp = nullptr;
@@ -125,24 +122,48 @@ public:
 // whether we want to run without LLVM and taint analysis
 static bool dont_enable_taint = false;
 
-
+// whether to exclude callstack information
 static bool no_callstack = false;
 
 // filename where to print the collected data
-static const char* outfile = nullptr;
+// static const char* outfile = nullptr;
 
+// automatically add processes on hypercall
+// set to true if no asid is specified
 static bool automatically_add_processes = false;
 
+// treat external events (hypercalls) as primary events
+// (not as tags)
 static bool extevents_as_primary = false;
+
+// only taint arguments to the syscalls instead of
+// all data written inside
 static bool only_taint_syscall_args = false;
-static bool use_candidate_pointers = false;
+
+// try to recognize data pointed by syscall argument
+static bool use_candidate_pointers = true;
+
+// do not intercept syscalls, only extevents
 static bool no_syscalls = false;
+
+// taint at the end of each block. Needed when using taint2
+// instead of tcgtaint
 static const bool defer_tainting_writes_to_end_of_the_block = false;
-static bool debug_logs = true;
+
+// additional debugging logs
+static bool debug_logs = false;
+
+// turn off taint engine when switching to an untracked process
+// experimental
 static bool disable_taint_on_other_processes = false;
 
+// close replay at
 static uint64_t target_end_count = 0;
+
+// turn on tainting at
 static uint64_t target_taint_at = 0;
+
+static bool set_taint_dereference = false;
 
 // Globals:
 //////////////
@@ -159,6 +180,8 @@ static FQThreadId getFQThreadId(CPUState* cpu){
 static EventTracker events;
 
 static std::set<hwaddr> phisicalAddressesToTaint;
+
+static std::map<uint64_t, std::shared_ptr<Event>> commonFunctions;
 
 //starting from 1000, so we can use the first 1000 for progressive notifications
 static uint32_t next_available_label = 1000;
@@ -234,10 +257,7 @@ static void writeLabelPA(uint64_t pa_addr, size_t size, Label label, bool additi
 
 #ifdef TARGET_I386
 
-static void finalize_current_event(CPUState* cpu, FQThreadId thread){
-    std::shared_ptr<Event> event = events.getEvent(thread);
-    assert(event);
-
+static void finalize_event(CPUState* cpu, std::shared_ptr<Event> event){
     // finalizing
     event->ended = rr_get_guest_instr_count();
 
@@ -251,6 +271,14 @@ static void finalize_current_event(CPUState* cpu, FQThreadId thread){
       current_callstack.resize(callstacksize);
       event->callstack = std::move(current_callstack);
     }
+}
+
+static void finalize_current_event(CPUState* cpu, FQThreadId thread){
+    std::shared_ptr<Event> event = events.getEvent(thread);
+    assert(event);
+
+    // finalizing
+    finalize_event(cpu,event);
 
     //logging
     logEvent(*event, outfp);
@@ -278,6 +306,7 @@ bool syscall_to_discard(unsigned syscall_no) {
   case 335: // NtSetInformationThread (outlier)
   case 216: // NtPulseEvent (no idea)
   case 271: // NtRaiseException (ehrm... noise?)
+  case 168: // NtMapViewOfSection (not so useful, could end up tainting too much data on dereference)
   case 44:
     return true;
   default:
@@ -501,11 +530,9 @@ void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         return;
     }
 
+    auto thread = getFQThreadId(cpu);
+    auto p_current_event = events.getEvent(thread);
     if(monitored_encoding_calls.count(entrypoint)){
-
-        auto thread = getFQThreadId(cpu);
-        auto p_current_event = events.getEvent(thread);
-
         if(p_current_event){
             if(p_current_event->kind == EventKind::syscall){
                 cerr << "encoding call during a syscall. This shouldn't happen. "
@@ -530,6 +557,17 @@ void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         event->label = next_available_label++;
 
         events.put_event(thread, event);
+    } else {
+        if(!p_current_event){
+        //put the function in the map
+            auto event = make_shared<Event>();
+            event->kind = EventKind::commonfn;
+            event->entrypoint = entrypoint;
+            event->thread = thread;
+            event->started = callid;
+            event->label = next_available_label++;
+            commonFunctions[callid] = event;
+        }
     }
 }
 
@@ -548,8 +586,24 @@ void on_function_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
     if(p_current_event && p_current_event->started == callid){
         finalize_current_event(cpu, thread);
     }
+
+    if(commonFunctions.count(callid)){
+        auto& commonFn = commonFunctions[callid];
+        if(commonFn->taintedWrites > 16){
+            finalize_event(cpu, commonFn);
+            logEvent(*commonFn, outfp);
+        }
+        commonFunctions.erase(callid);
+    }
 }
 
+void on_function_forced_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
+                               uint32_t skipped_frames){
+    (void) cpu;
+    (void) skipped_frames;
+    (void) entrypoint;
+    commonFunctions.erase(callid);
+}
 
 // ========================
 // Memory access tracking
@@ -620,6 +674,27 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                     writeLabelPA(physical_address+i, 1, p_current_event->getLabel(), false);
                 }
             }
+        }
+    } else {
+        //common function
+        auto callid = get_current_callid(cpu);
+        if(commonFunctions.count(callid)){
+            hwaddr physical_address = panda_virt_to_phys(cpu, addr);
+            bool translation_error = physical_address == static_cast<hwaddr>(-1);
+            if(translation_error) return 0;
+
+            for(target_ulong i=0; i<size; i++){
+                commonFunctions[callid]->memory.read(addr +i ,  data[i]);
+
+                uint32_t nlabels = tcgtaint_get_physical_memory_labels_count(physical_address + i);
+                if(nlabels){
+                    commonFunctions[callid]->taintedWrites++;
+                }
+            }
+
+            readLabels(cpu, addr, size, [callid](uint32_t addri, uint32_t dep){
+                commonFunctions[callid]->memory.readdep(addri, dep);
+            });
         }
     }
     
@@ -718,12 +793,11 @@ int systaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
 //}
 
 
-std::set<target_ulong> parse_addr_list(const char* addrs){
+std::set<target_ulong> parse_addr_list(const std::string& addrs_s){
+    const char* addrs = addrs_s.c_str();
     std::set<target_ulong> res;
-    if(!addrs) return res;
 
     char* arrt = strdup(addrs);
-
     char* pch = strtok(arrt, " ,;_");
     while (pch != NULL){
         res.insert(static_cast<target_ulong>(std::stoul(pch, nullptr, 0)));
@@ -787,6 +861,50 @@ void external_event_notif(CPUState *cpu, uint32_t eventid, uint32_t pointer, uin
 }
 
 
+void loadConfigFile(const std::string& filename){
+    std::ifstream cfgfile(filename);
+    if(!cfgfile.is_open())
+        throw std::invalid_argument("couldn't open config");
+    auto configjson = nlohmann::json::parse(cfgfile);
+    target_taint_at = configjson.value("taintat",0UL);
+    target_end_count = configjson.value("endat",0UL);
+    only_taint_syscall_args = configjson.value("only_syscall_args", false);
+    use_candidate_pointers = only_taint_syscall_args;
+
+    if(configjson.count("asids")){
+        std::vector<Asid> asids = configjson.at("asids");
+        for (const Asid i: asids)
+            monitored_processes.insert(i);
+    } else {
+        automatically_add_processes = true;
+    }
+
+    disable_taint_on_other_processes = configjson.value("no_taint_other", false);
+    no_callstack = configjson.value("no_callstack", false);
+    extevents_as_primary = configjson.value("extevents", false);
+    no_syscalls = configjson.value("no_syscalls", false);
+
+    if(configjson.count("encfns")){
+        auto& encfns = configjson.at("encfns");
+        if(encfns.is_string()){
+            monitored_encoding_calls = parse_addr_list(encfns.get<string>());
+        } else if (encfns.is_array()) {
+            std::vector<Address> enc_calls = encfns;
+            for(const Address a: enc_calls){
+                monitored_encoding_calls.insert(a);
+            }
+        }
+    }
+
+    set_taint_dereference = configjson.value("taint_dereference", false);
+}
+
+std::string remove_extension(const std::string& filename) {
+    size_t lastdot = filename.find_last_of(".");
+    if (lastdot == std::string::npos) return filename;
+    return filename.substr(0, lastdot);
+}
+
 void *plugin_self;
 bool init_plugin(void *self) {
  
@@ -846,112 +964,47 @@ bool init_plugin(void *self) {
     PPP_REG_CB("sysevent", on_sysevent_notif, external_event_notif);
 
     panda_arg_list *args = panda_get_args("systaint");
+    if (args == NULL)
+        return false;
 
-    if (args != NULL) {
+    const char* cfg_file = panda_parse_string_req(args, "cfg", "Configuration file");
+    loadConfigFile(cfg_file);
 
-        target_taint_at = panda_parse_uint64_opt(args, "taintat", 0, "instruction count when to enable tainting");
-        target_end_count = panda_parse_uint64_opt(args, "endat", 0, "instruction count when to end the replay");
-
-        only_taint_syscall_args = panda_parse_bool_opt(args, "only_syscall_args", "only taint syscall arguments");
-        if(only_taint_syscall_args){
-            std::cout << "Only tainting syscall args" << std::endl;
-        }
-
-        use_candidate_pointers = only_taint_syscall_args;
-        if(use_candidate_pointers){
-            std::cout << "Using candidate pointers" << std::endl;
-        }
-
-        const char* tracked_asids = panda_parse_string_opt(args, "asids", nullptr, "list of asids to track");
-        if(tracked_asids){
-            if(!strcmp(tracked_asids, "auto")){
-                automatically_add_processes = true;
-            } else {
-                monitored_processes = parse_addr_list(tracked_asids);
-            }
-        }
-
-        const char* tracked_encoding_fn = panda_parse_string_opt(args, "encfns", nullptr, "list of encoding function addresses");
-        if(tracked_encoding_fn)
-            monitored_encoding_calls = parse_addr_list(tracked_encoding_fn);
-
-        dont_enable_taint = panda_parse_bool_opt(args, "no_taint", "disables automatically turning on tainting");
-        cout << "no_taint " << dont_enable_taint << endl;
-
-        disable_taint_on_other_processes = panda_parse_bool_opt(args, "no_taint_other", "toggles tainting on task switch");
-        cout << "no_taint_other " << disable_taint_on_other_processes << endl;
-
-        no_callstack = panda_parse_bool_opt(args, "no_callstack", "disable callstack instrumentation");
-        cout << "no_callstack " << no_callstack << endl;
-
-        if(!no_callstack){
-            panda_require("callstack_instr");
-            assert(init_callstack_instr_api());
-            PPP_REG_CB("callstack_instr", on_call2, on_function_call);
-            PPP_REG_CB("callstack_instr", on_ret2, on_function_return);
-        }
-
-        extevents_as_primary = panda_parse_bool_opt(args, "extevents", "use syscalls as primary events");
-
-        no_syscalls = panda_parse_bool_opt(args, "no_syscalls", "don't track syscalls");
-        if(no_syscalls){
-            extevents_as_primary = true;
-        }
-
-        outfile = panda_parse_string_opt(args, "outfile", nullptr, "an output file");
-
-        if(!outfile && !pandalog){
-            outfile = "systaint";
-        }
-
-        debug_logs = panda_parse_bool_opt(args, "debug", "log additional debugging info");
-        cout << "debug " << debug_logs << endl;
+    if(use_candidate_pointers){
+        std::cout << "Using candidate pointers" << std::endl;
     }
 
-    if(outfile){
+    cout << "no_taint " << dont_enable_taint << endl;
+    cout << "no_taint_other " << disable_taint_on_other_processes << endl;
+    cout << "no_callstack " << no_callstack << endl;
 
-        char temp[PATH_MAX];
-        string outFileName(outfile);
-
-        std::time_t t = std::time(nullptr);
-        if (std::strftime(temp, sizeof(temp), "%y-%m-%d-%H-%M", std::localtime(&t))) {
-            outFileName += temp;
-        }
-
-        outfp = fopen(outFileName.data(), "w");
-        if(!outfp){
-            perror("unable to open output file");
-            exit(-1);
-        }
-
-        // Dump analysis informations to file
-
-        nlohmann::json paramdump;
-        for (int i=0; i<args->nargs;i++) {
-            const panda_arg& arg = args->list[i];
-            paramdump[arg.key] = arg.value;
-        }
-
-        nlohmann::json analysisinfo;
-        char* res = getcwd(temp, sizeof(temp));
-        analysisinfo["params"] = paramdump;
-        analysisinfo["outfile"] = outFileName.data();
-        analysisinfo["build"] = __DATE__;
-        if(res){
-            analysisinfo["cwd"] = temp;
-        }
-
-        string analysisInfoName = outFileName + ".info.json";
-        string jsondump = analysisinfo.dump(2);
-
-        FILE* analysisInfoFile = fopen(analysisInfoName.data(), "w");
-        if(analysisInfoFile){
-            fwrite(jsondump.data(), jsondump.size(),1, analysisInfoFile);
-            fclose(analysisInfoFile);
-        }
-
-        cout << "exec info file " << analysisInfoName << std::endl;
+    if(!no_callstack){
+        panda_require("callstack_instr");
+        assert(init_callstack_instr_api());
+        PPP_REG_CB("callstack_instr", on_call2, on_function_call);
+        PPP_REG_CB("callstack_instr", on_ret2, on_function_return);
+        PPP_REG_CB("callstack_instr", on_forcedret, on_function_forced_return);
     }
+
+    if(no_syscalls){
+        extevents_as_primary = true;
+    }
+
+    std::string outfilename = remove_extension(cfg_file);
+    outfilename.append(".data");
+
+    outfp = fopen(outfilename.data(), "w");
+    if(!outfp){
+        perror("unable to open output file");
+        exit(-1);
+    }
+
+    cout << "BUILD" << __DATE__ << endl;
+    cout << "CONFIG" << endl;
+    std::ifstream f(cfg_file);
+    if (f.is_open())
+        std::cout << f.rdbuf();
+    cout << endl;
 
     for(const auto&i : monitored_encoding_calls){
         cout << "tracking encfn " << i << endl;
@@ -964,6 +1017,7 @@ bool init_plugin(void *self) {
     //TODO now probably useless
     panda_do_flush_tb();
     panda_enable_precise_pc();
+    tcgtaint_set_taint_dereference(set_taint_dereference);
 
 #endif
 

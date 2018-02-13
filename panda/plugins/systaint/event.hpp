@@ -50,7 +50,8 @@ enum class EventKind {
   syscall,
   encoding,
   external,
-  notification
+  notification,
+  commonfn
 };
 
 /* TODO
@@ -125,6 +126,7 @@ struct Event {
     FQThreadId thread;
     EventKind kind = EventKind::unknown;
     uint32_t parent = 0;
+    uint32_t taintedWrites = 0;
 
     std::string toString() const {
         std::stringstream res;
@@ -140,6 +142,8 @@ struct Event {
             res << "unknown "; break;
         case EventKind::notification:
             res << "notification"; break;
+        case EventKind::commonfn:
+            res << "commonfn"; break;
         }
         res << "id " << getLabel() << " ep: " << entrypoint
             << " started " << started << " thread " << thread.second;
@@ -150,5 +154,4 @@ struct Event {
         if(label) return label;
         else return started;
     }
-
 };

@@ -75,3 +75,7 @@ void tcgtaint_physical_memory_labels_copy(target_ulong addr, uint32_t *out) {
         }
     }
 }
+
+void tcgtaint_set_taint_dereference(bool status){
+     tcgtaint_ctx.taint_engine->set_taint_dereference(status);
+}

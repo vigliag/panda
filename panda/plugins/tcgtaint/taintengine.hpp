@@ -35,7 +35,7 @@ class TaintEngine {
         cpuregs_[2].ignore(); //no idea what they are
         cpuregs_[11].ignore(); //esp
         cpuregs_[12].ignore(); //ebp
-        for(int i=13; i<=15; i++){
+        for(int i=13; i<=15; i++){ //TODO better continue till 28? we'll find out
             cpuregs_[i].ignore(); //segments bases
         }
     }
