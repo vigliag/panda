@@ -125,6 +125,7 @@ panda/plugins/stringsearch/stringsearch.cpp
 panda/plugins/stringsearch/stringsearch.h
 panda/plugins/stringsearch2/Makefile
 panda/plugins/stringsearch2/USAGE.md
+panda/plugins/stringsearch2/base64.hpp
 panda/plugins/stringsearch2/stringsearch2.cpp
 panda/plugins/stringsearch2/stringsearch2.h
 panda/plugins/syscalls2/gen_syscall_ppp_boilerplate_enter.cpp
