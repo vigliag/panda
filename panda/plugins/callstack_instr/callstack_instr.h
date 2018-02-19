@@ -29,4 +29,8 @@ typedef void (* on_ret_t)(CPUState *env, target_ulong func);
 typedef void (* on_call2_t)(CPUState *env, target_ulong entrypoint, uint64_t callid);
 typedef void (* on_ret2_t)(CPUState *env, target_ulong entrypoint, uint64_t callid, uint32_t skipped_frames);
 typedef void (* on_forcedret_t)(CPUState *env, target_ulong entrypoint, uint64_t callid, uint32_t skipped_frames);
+
+// todo: the void* should be a cs_instr
+typedef void (* on_tb_translated_disass_t)(CPUState *env, TranslationBlock *tb, size_t handle, void *first, size_t count);
+
 #endif

@@ -19,7 +19,8 @@
 #include <stdio.h>
 #include <json.hpp>
 #include <cctype>
-
+#include <regex>
+#include <capstone/capstone.h>
 #include "callstack_instr/callstack_instr.h"
 #include "EntropyCalculator.hpp"
 
@@ -53,6 +54,8 @@ struct CallInfo {
     uint64_t called_by = 0;
     uint64_t caller_addr = 0;
     std::vector<Address> callstack;
+    uint64_t instructions_tot = 0;
+    uint64_t instructions_arith = 0;
 };
 
 /* Data structures */
@@ -120,7 +123,6 @@ void on_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
             call_infos[callid].callstack.push_back(callstackit->function);
         }
     }
-
 }
 
 
@@ -287,6 +289,8 @@ void on_ret(CPUState *cpu, target_ulong entrypoint, uint64_t callid, uint32_t sk
     out["phisical"] = physPC;
     out["called_by"] = call.called_by;
     out["id"] = call.instruction_count_call;
+    out["insn_arith"] = call.instructions_arith;
+    out["insn_total"] = call.instructions_tot;
 
     auto writes = nlohmann::json::array();
     for(const bufferinfo& wrb : writebuffs){
@@ -352,6 +356,25 @@ std::set<target_ulong> parse_addr_list(const char* addrs){
     return res;
 }
 
+
+static const std::regex ArithMnemonicRegex{R"(add|adc|sub|xor|shr|shl|div)"};
+class ArithOpsCounter {
+public:
+    uint32_t arith = 0;
+    uint32_t total = 0;
+    void fromMnemonic(const char* mnemonic){
+        total++;
+        bool is_arith = std::regex_search(mnemonic, ArithMnemonicRegex);
+        if(is_arith) arith++;
+    }
+};
+static std::unordered_map<target_ulong, ArithOpsCounter> arithcounters;
+
+static inline uint32_t tb_idx(CPUState* cpu, TranslationBlock *tb){
+    (void) cpu;
+    return tb->pc;
+}
+
 int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
     if (panda_in_kernel(cpu) || !tracked_asids.count(panda_current_asid(cpu))){
         return 0;
@@ -370,7 +393,23 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
         rr_end_replay_requested = 1;
     }
 
+    auto& counter = arithcounters[tb_idx(cpu,tb)];
+    call.instructions_arith += counter.arith;
+    call.instructions_tot += counter.total;
+
     return 0;
+}
+
+void fnmemlogger_on_tb_translated_disass(CPUState *cpu, TranslationBlock *tb,
+                                         size_t handle, void *first_,
+                                         size_t count){
+    ArithOpsCounter aoc;
+    cs_insn* insn = reinterpret_cast<cs_insn*>(first_);
+    for(size_t i =0 ; i < count; i++){
+        aoc.fromMnemonic(insn[i].mnemonic);
+    }
+
+    arithcounters[tb_idx(cpu, tb)] = aoc;
 }
 
 void *plugin_self;
@@ -396,6 +435,8 @@ bool init_plugin(void *self) {
 
     PPP_REG_CB("callstack_instr", on_call2, on_call);
     PPP_REG_CB("callstack_instr", on_ret2, on_ret);
+    PPP_REG_CB("callstack_instr", on_tb_translated_disass, fnmemlogger_on_tb_translated_disass);
+
 
     panda_disable_tb_chaining();  //TODO actually needed?
     panda_enable_memcb();

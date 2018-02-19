@@ -1,4 +1,4 @@
-/* PANDABEGINCOMMENT
+﻿/* PANDABEGINCOMMENT
  *
  * Authors:
  *  Tim Leek               tleek@ll.mit.edu
@@ -58,6 +58,7 @@ PPP_PROT_REG_CB(on_ret);
 PPP_PROT_REG_CB(on_call2);
 PPP_PROT_REG_CB(on_ret2);
 PPP_PROT_REG_CB(on_forcedret);
+PPP_PROT_REG_CB(on_tb_translated_disass);
 }
 
 PPP_CB_BOILERPLATE(on_call);
@@ -66,6 +67,8 @@ PPP_CB_BOILERPLATE(on_ret);
 PPP_CB_BOILERPLATE(on_call2);
 PPP_CB_BOILERPLATE(on_ret2);
 PPP_CB_BOILERPLATE(on_forcedret);
+PPP_CB_BOILERPLATE(on_tb_translated_disass);
+
 
 //Capstone handles
 csh cs_handle_32;
@@ -306,6 +309,7 @@ int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
 
     // use the disassembly
     call_cache[tb->pc] = last_instruction_type(handle, insn, count);
+    PPP_RUN_CB(on_tb_translated_disass, cpu, tb, handle, insn, count);
 
     cs_free(insn, count);
     return 1;
