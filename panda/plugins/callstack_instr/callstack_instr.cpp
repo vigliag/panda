@@ -240,18 +240,27 @@ static stackid get_stackid(CPUState* cpu) {
     }
 }
 
-/**
- * Disassembles a block of code, then returns the instr_type of the last
- * instruction (CALL, RET, or UNKNOWN)
-*/
-static instr_type disas_block(CPUArchState* env, target_ulong pc, uint32_t size) {
+static instr_type last_instruction_type(csh handle, cs_insn *first, size_t count){
+    cs_insn *end;
+    for (end = first + count - 1; end >= first; end--) {
+        if (!cs_insn_group(handle, end, CS_GRP_INVALID)) {
+            break;
+        }
+    }
+    if (end < first)
+        return INSTR_UNKNOWN;
 
-    CPUState *cpu = ENV_GET_CPU(env);
+    if (cs_insn_group(handle, end, CS_GRP_CALL)) {
+        return INSTR_CALL;
+    } else if (cs_insn_group(handle, end, CS_GRP_RET)) {
+        return INSTR_RET;
+    } else {
+        return INSTR_UNKNOWN;
+    }
+}
 
-    unsigned char *buf = (unsigned char *) malloc(size);
-    int err = panda_virtual_memory_rw(cpu, pc, buf, size, 0);
-    if (err == -1) printf("Couldn't read TB memory!\n");
-    instr_type res = INSTR_UNKNOWN;
+static csh obtain_cs_handle(CPUState* cpu){
+    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
 
 #if defined(TARGET_I386)
     csh handle = (env->hflags & HF_LMA_MASK) ? cs_handle_64 : cs_handle_32;
@@ -269,44 +278,41 @@ static instr_type disas_block(CPUArchState* env, target_ulong pc, uint32_t size)
     csh handle = cs_handle_32;
 #endif
 
-    cs_insn *insn;
-    cs_insn *end;
-    size_t count = cs_disasm(handle, buf, size, pc, 0, &insn);
-    if (count <= 0) goto done2;
-
-    for (end = insn + count - 1; end >= insn; end--) {
-        if (!cs_insn_group(handle, end, CS_GRP_INVALID)) {
-            break;
-        }
-    }
-    if (end < insn) goto done;
-
-    if (cs_insn_group(handle, end, CS_GRP_CALL)) {
-        res = INSTR_CALL;
-    } else if (cs_insn_group(handle, end, CS_GRP_RET)) {
-        res = INSTR_RET;
-    } else {
-        res = INSTR_UNKNOWN;
-    }
-
-done:
-    cs_free(insn, count);
-done2:
-    free(buf);
-    return res;
+    return handle;
 }
 
 // Every time a block is translated, save in call_cache the kind of instruction
 // it ends with
 int after_block_translate(CPUState *cpu, TranslationBlock *tb) {
-    CPUArchState* env = (CPUArchState*)cpu->env_ptr;
-    call_cache[tb->pc] = disas_block(env, tb->pc, tb->size);
+    // default value in case of error
+    call_cache[tb->pc] = INSTR_UNKNOWN;
 
+    // read the block of code into a buffer
+    std::vector<uint8_t> buf(tb->size);
+    int err = panda_virtual_memory_rw(cpu, tb->pc, buf.data(), tb->size, 0);
+    if(err == -1){
+        printf("Couldn't read TB memory!\n");
+        return 1;
+    }
+
+    // disassemble it
+    csh handle = obtain_cs_handle(cpu);
+    cs_insn *insn;  // will point to the first disassembled instruction
+    size_t count = cs_disasm(handle, buf.data(), tb->size, tb->pc, 0, &insn);
+    if (count <= 0){
+        printf("Unable to disassemble TB\n");
+        return  0;
+    };
+
+    // use the disassembly
+    call_cache[tb->pc] = last_instruction_type(handle, insn, count);
+
+    cs_free(insn, count);
     return 1;
 }
 
 // Before a block is executed, check if program-counter we are jumping in
-// is a registerd return address, if it is, then we are returning, and we can remove our
+// is a registered return address, if it is, then we are returning, and we can remove our
 // stackframe from our shadow stack
 int before_block_exec(CPUState *cpu, TranslationBlock *tb) {
     stackid current_stackid = get_stackid(cpu);
