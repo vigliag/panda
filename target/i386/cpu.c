@@ -750,7 +750,7 @@ static X86CPUDefinition builtin_x86_defs[] = {
         .features[FEAT_8000_0001_ECX] =
             CPUID_EXT3_LAHF_LM | CPUID_EXT3_SVM,
         .xlevel = 0x8000000A,
-        .model_id = "QEMU Virtual CPU version " QEMU_HW_VERSION,
+        .model_id = "PNDA CPU version " QEMU_HW_VERSION,
     },
     {
         .name = "phenom",
@@ -847,7 +847,7 @@ static X86CPUDefinition builtin_x86_defs[] = {
         .features[FEAT_1_ECX] =
             CPUID_EXT_SSE3,
         .xlevel = 0x80000004,
-        .model_id = "QEMU Virtual CPU version " QEMU_HW_VERSION,
+        .model_id = "PNDA CPU version " QEMU_HW_VERSION,
     },
     {
         .name = "kvm32",
@@ -944,7 +944,7 @@ static X86CPUDefinition builtin_x86_defs[] = {
         .features[FEAT_8000_0001_EDX] =
             CPUID_EXT2_MMXEXT | CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT,
         .xlevel = 0x80000008,
-        .model_id = "QEMU Virtual CPU version " QEMU_HW_VERSION,
+        .model_id = "PNDA CPU version " QEMU_HW_VERSION,
     },
     {
         .name = "n270",

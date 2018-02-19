@@ -461,17 +461,17 @@ bool e820_get_entry(int, uint32_t, uint64_t *, uint64_t *);
     {\
         .driver   = "qemu32-" TYPE_X86_CPU,\
         .property = "model-id",\
-        .value    = "QEMU Virtual CPU version " v,\
+        .value    = "PNDA CPU version " v,\
     },\
     {\
         .driver   = "qemu64-" TYPE_X86_CPU,\
         .property = "model-id",\
-        .value    = "QEMU Virtual CPU version " v,\
+        .value    = "PNDA CPU version " v,\
     },\
     {\
         .driver   = "athlon-" TYPE_X86_CPU,\
         .property = "model-id",\
-        .value    = "QEMU Virtual CPU version " v,\
+        .value    = "PNDA CPU version " v,\
     },
 
 #define PC_COMPAT_2_4 \

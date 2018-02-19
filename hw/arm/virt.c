@@ -1159,7 +1159,7 @@ static void virt_build_smbios(VirtMachineState *vms)
 {
     uint8_t *smbios_tables, *smbios_anchor;
     size_t smbios_tables_len, smbios_anchor_len;
-    const char *product = "QEMU Virtual Machine";
+    const char *product = "PNDA Machine";
 
     if (!vms->fw_cfg) {
         return;

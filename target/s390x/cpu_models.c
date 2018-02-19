@@ -1005,7 +1005,7 @@ static void s390_qemu_cpu_model_class_init(ObjectClass *oc, void *data)
     S390CPUClass *xcc = S390_CPU_CLASS(oc);
 
     xcc->is_migration_safe = true;
-    xcc->desc = g_strdup_printf("QEMU Virtual CPU version %s",
+    xcc->desc = g_strdup_printf("PNDA CPU version %s",
                                 qemu_hw_version());
 }
 
