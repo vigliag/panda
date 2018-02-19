@@ -67,7 +67,7 @@ enum {
 };
 
 static const USBDescStrings desc_strings = {
-    [STR_MANUFACTURER]     = "QEMU",
+    [STR_MANUFACTURER]     = "PNDA",
     [STR_PRODUCT]          = "Wacom PenPartner",
     [STR_SERIALNUMBER]     = "1",
 };
