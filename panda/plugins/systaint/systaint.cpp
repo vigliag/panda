@@ -596,16 +596,23 @@ void on_function_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
 
     if(commonFunctions.count(callid)){
         auto& commonFn = commonFunctions[callid];
-        if(commonFn->taintedReads > 16){
+        size_t memory_access_size =
+                commonFn->memory.readset.size() + commonFn->memory.writeset.size();
+        if(memory_access_size > 81920){
+            //bail out if function read/wrote too mutch
+        } else if(commonFn->taintedReads > 16){
             finalize_event(cpu, commonFn);
             logEvent(*commonFn, outfp);
         } else if(!searches.empty()){
             //handle stringsearch
             std::vector<uint8_t> buff;
             bool found = false;
-            buff.reserve(commonFn->memory.readset.size());
+            buff.reserve(memory_access_size);
             for(const auto& read: commonFn->memory.readset){
                 buff.push_back(read.second);
+            }
+            for(const auto& write: commonFn->memory.writeset){
+                buff.push_back(write.second);
             }
             for(const SearchInfo& search : searches){
                 auto it = std::search(buff.begin(), buff.end(),
@@ -620,7 +627,6 @@ void on_function_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
                 logEvent(*commonFn, outfp);
             }
         }
-
         commonFunctions.erase(callid);
     }
 }
