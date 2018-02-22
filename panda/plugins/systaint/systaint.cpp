@@ -16,6 +16,7 @@
 #include <json.hpp> //nlohmann json
 #include <unistd.h> //getcwd
 #include <fstream>
+#include "../stringsearch2/searchmanager.h"
 
 // These need to be extern "C" so that the ABI is compatible with
 // QEMU/PANDA, which is written in C
@@ -157,6 +158,9 @@ static bool debug_logs = false;
 // experimental
 static bool disable_taint_on_other_processes = false;
 
+// log all function calls (tainted data only)
+static bool log_common_function_calls = true;
+
 // close replay at
 static uint64_t target_end_count = 0;
 
@@ -167,7 +171,6 @@ static bool set_taint_dereference = false;
 
 // Globals:
 //////////////
-
 
 std::set<Asid> monitored_processes; //shared with syscall_listener
 
@@ -185,6 +188,10 @@ static std::map<uint64_t, std::shared_ptr<Event>> commonFunctions;
 
 //starting from 1000, so we can use the first 1000 for progressive notifications
 static uint32_t next_available_label = 1000;
+
+//stuff to search in ram
+//if search is specified as parameter
+std::vector<SearchInfo> searches;
 
 // Wrappers:
 
@@ -558,7 +565,7 @@ void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
 
         events.put_event(thread, event);
     } else {
-        if(!p_current_event){
+        if(!p_current_event && log_common_function_calls){
         //put the function in the map
             auto event = make_shared<Event>();
             event->kind = EventKind::commonfn;
@@ -589,10 +596,31 @@ void on_function_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
 
     if(commonFunctions.count(callid)){
         auto& commonFn = commonFunctions[callid];
-        if(commonFn->taintedWrites > 16){
+        if(commonFn->taintedReads > 16){
             finalize_event(cpu, commonFn);
             logEvent(*commonFn, outfp);
+        } else if(!searches.empty()){
+            //handle stringsearch
+            std::vector<uint8_t> buff;
+            bool found = false;
+            buff.reserve(commonFn->memory.readset.size());
+            for(const auto& read: commonFn->memory.readset){
+                buff.push_back(read.second);
+            }
+            for(const SearchInfo& search : searches){
+                auto it = std::search(buff.begin(), buff.end(),
+                                      search.buffer.begin(), search.buffer.end());
+                if(it != buff.end()){
+                    found = true;
+                    break;
+                }
+            }
+            if(found){
+                finalize_event(cpu, commonFn);
+                logEvent(*commonFn, outfp);
+            }
         }
+
         commonFunctions.erase(callid);
     }
 }
@@ -671,7 +699,12 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                     // which has instrumentation _after_ the store, and would immediately clear the taint
                     phisicalAddressesToTaint.insert(physical_address + i);
                 } else {
-                    writeLabelPA(physical_address+i, 1, p_current_event->getLabel(), false);
+                    bool additive = false;
+                    if(p_current_event->kind == EventKind::encoding){
+                        additive = true;
+                    }
+                    writeLabelPA(physical_address+i, 1, p_current_event->getLabel(), additive);
+
                 }
             }
         }
@@ -684,17 +717,8 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
             if(translation_error) return 0;
 
             for(target_ulong i=0; i<size; i++){
-                commonFunctions[callid]->memory.read(addr +i ,  data[i]);
-
-                uint32_t nlabels = tcgtaint_get_physical_memory_labels_count(physical_address + i);
-                if(nlabels){
-                    commonFunctions[callid]->taintedWrites++;
-                }
+                commonFunctions[callid]->memory.write(addr +i ,  data[i]);
             }
-
-            readLabels(cpu, addr, size, [callid](uint32_t addri, uint32_t dep){
-                commonFunctions[callid]->memory.readdep(addri, dep);
-            });
         }
     }
     
@@ -718,14 +742,13 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
     auto thread = getFQThreadId(cpu);
     auto p_current_event = events.getEvent(thread);
 
-    if(!p_current_event || !isUserSpaceAddress(addr)){
+    if(!isUserSpaceAddress(addr)){
         return 0;
     }
 
-    // If there's an event currently executing, track its reads to find dependencies
-    // from previous syscalls
-
-    if(use_candidate_pointers || true){
+    //Update the known pointers list
+    //this allows us to associate some data being read by a syscall with one of the syscall arguments
+    if(p_current_event && p_current_event->kind == EventKind::syscall){
         auto closest_datapointer = p_current_event->knownDataPointers.closest_known_datapointer(addr);
         bool add_addr_to_candidate_pointers = bool(closest_datapointer);
 
@@ -742,13 +765,35 @@ int mem_read_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
         }
     }
 
-    for(target_ulong i=0; i< size; i++){
-        p_current_event->memory.read(addr +i ,  data[i]);
+    if(p_current_event){
+        for(target_ulong i=0; i< size; i++){
+            p_current_event->memory.read(addr +i ,  data[i]);
+        }
+        readLabels(cpu, addr, size, [&p_current_event](uint32_t addri, uint32_t dep){
+            p_current_event->memory.readdep(addri, dep);
+        });
+        return 0;
     }
 
-    readLabels(cpu, addr, size, [&p_current_event](uint32_t addri, uint32_t dep){
-        p_current_event->memory.readdep(addri, dep);
-    });
+    auto callid = get_current_callid(cpu);
+    if(commonFunctions.count(callid)){
+        hwaddr physical_address = panda_virt_to_phys(cpu, addr);
+        bool translation_error = physical_address == static_cast<hwaddr>(-1);
+        if(translation_error) return 0;
+
+        for(target_ulong i=0; i<size; i++){
+            commonFunctions[callid]->memory.read(addr +i ,  data[i]);
+
+            uint32_t nlabels = tcgtaint_get_physical_memory_labels_count(physical_address + i);
+            if(nlabels){
+                commonFunctions[callid]->taintedReads++;
+            }
+        }
+
+        readLabels(cpu, addr, size, [callid](uint32_t addri, uint32_t dep){
+            commonFunctions[callid]->memory.readdep(addri, dep);
+        });
+    }
 
     return 0;
 }
@@ -866,6 +911,8 @@ void loadConfigFile(const std::string& filename){
     if(!cfgfile.is_open())
         throw std::invalid_argument("couldn't open config");
     auto configjson = nlohmann::json::parse(cfgfile);
+
+    dont_enable_taint = configjson.value("notaint", false);
     target_taint_at = configjson.value("taintat",0UL);
     target_end_count = configjson.value("endat",0UL);
     only_taint_syscall_args = configjson.value("only_syscall_args", false);
@@ -897,6 +944,7 @@ void loadConfigFile(const std::string& filename){
     }
 
     set_taint_dereference = configjson.value("taint_dereference", false);
+    log_common_function_calls = configjson.value("log_common_fns", true);
 }
 
 std::string remove_extension(const std::string& filename) {
@@ -968,6 +1016,18 @@ bool init_plugin(void *self) {
         return false;
 
     const char* cfg_file = panda_parse_string_req(args, "cfg", "Configuration file");
+    const char* search = panda_parse_string_opt(args, "search", nullptr, "List of files whose contents to search in memory");
+
+    if(search){
+        SearchManager sm(32,4);
+        sm.readFileList(search);
+        searches = sm.searches;
+        if(searches.empty()){
+            cerr << "couldnt load any string to search" << endl;
+            return false;
+        }
+    }
+
     loadConfigFile(cfg_file);
 
     if(use_candidate_pointers){

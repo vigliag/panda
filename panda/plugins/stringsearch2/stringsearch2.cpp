@@ -28,6 +28,7 @@ PANDAENDCOMMENT */
 #include <set>
 #include <json.hpp>
 #include "base64.hpp"
+#include "searchmanager.h"
 
 using json = nlohmann::json;
 
@@ -89,12 +90,7 @@ struct MatchInfo {
     uint32_t last_addr = 0;
     uint32_t len = 0;
     std::vector<uint8_t> context;
-};
-
-struct SearchInfo {
-    std::string name;
-    std::string buffer;
-    target_ulong contextbytes = 0;
+    bool in_kernel = 0;
 };
 
 struct ProgPointStatus {
@@ -136,6 +132,7 @@ void logSearchStatus(const MatchInfo& match, const SearchInfo& si, const std::ve
     if(match.context.size()){
         ret["context"] = base64_encode(match.context.data(), match.context.size());
     }
+    ret["in_kernel"] = match.in_kernel;
     outfile <<  ret.dump() << std::endl;
 }
 
@@ -180,9 +177,12 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                     search_status.started = rr_get_guest_instr_count();
                 }
             } else if(static_cast<uint8_t>(search.buffer[0]) == val) {
-                search_status.bytesMatched = 0;
+                search_status.bytesMatched = 1;
+                search_status.started = rr_get_guest_instr_count();
             } else {
-                search_status = {};
+                search_status.bytesMatched = 0;
+                search_status.started = 0;
+                continue;
             }
 
             if (search_status.bytesMatched == search.buffer.length()) {
@@ -198,9 +198,12 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 match.id = search_id;
                 match.last_addr = addr;
                 match.len = search_status.bytesMatched;
+                match.in_kernel = panda_in_kernel(env);
 
-                printf("%s Match of str %lu at: instr_count=%lu :  " TARGET_FMT_lx " " TARGET_FMT_lx " " TARGET_FMT_lx "\n",
-                       (is_write ? "WRITE" : "READ"), search_id, rr_get_guest_instr_count(), p.caller, p.pc, p.cr3);
+                const char* is_write_str = is_write ? "WRITE" : "READ";
+                printf("%s Match of str %lu at: instr_count=%lu :  " TARGET_FMT_lx " " TARGET_FMT_lx " " TARGET_FMT_lx " %c \n",
+                       is_write_str, search_id, rr_get_guest_instr_count(),
+                       p.caller, p.pc, p.cr3, match.in_kernel? 'K' : 'U');
 
                 if(search.contextbytes){
                     target_ulong startAddr = addr - search_status.bytesMatched - search.contextbytes;
@@ -290,74 +293,12 @@ bool init_plugin(void *self) {
     n_callers = panda_parse_uint32_opt(args, "callers", 32, "depth of callstack for matches");
     if (n_callers > MAX_CALLERS) n_callers = MAX_CALLERS;
 
-    // collect raw searches from file list
-    std::vector<std::string> search_names;
-    std::vector<std::string> raw_searches;
-    {
-        std::ifstream filelist_input(filelist_file);
+    SearchManager sm(CHUNK_LEN, NCHUNKS);
+    sm.readFileList(filelist_file);
+    searches = sm.searches;
 
-        for(std::string filename; getline(filelist_input, filename);){
-            std::ifstream filesearch_input(filename);
-            search_names.push_back(filename);
-
-            std::stringstream sstream;
-            sstream << filesearch_input.rdbuf();
-            filesearch_input.tellg();
-            if(filesearch_input.tellg() <= 0){
-                fprintf(stderr, "Unable to read the file %s\n", filename.c_str());
-                return false;
-            }
-
-            cout << "Added file " << filename << std::endl;
-            std::string raw_search = sstream.str();
-
-            //remove trailing return
-            if(raw_search.back() == '\n')
-                raw_search.pop_back();
-
-            raw_searches.push_back(std::move(raw_search));
-        }
-    }
-
-    if(raw_searches.size() == 0){
-        fprintf(stderr, "Unable to read any search\n");
-        return false;
-    }
-
-
-    size_t nrawsearches = raw_searches.size();
-
-    // search in chunks
-    int added_count = 0;
-    for(size_t i=0; i< nrawsearches; i++){
-        auto& raw_search = raw_searches[i];
-        size_t raw_search_len = raw_search.length();
-
-        for(size_t start=0; start < raw_search_len && start < CHUNK_LEN * NCHUNKS; start += CHUNK_LEN){
-            SearchInfo si;
-            si.buffer = raw_search.substr(start, CHUNK_LEN);
-            si.name = search_names[i];
-            si.name.append("+");
-            si.name.append(std::to_string(start));
-
-            //add context if its a single chunk
-            if(raw_search_len < CHUNK_LEN){
-                si.contextbytes = 256;
-            }
-
-            cout << added_count << " " << si.name << " " << si.buffer.length() << " ";
-            for(size_t j=0; j< si.buffer.length(); ++j){
-                printf("%02x", (unsigned char) si.buffer[j]);
-            }
-            cout << std::endl;
-            added_count++;
-            searches.push_back(si);
-        }
-    }
-
+    assert(searches.size());
     cout << "Added a total of " << searches.size() << " chunks" << std::endl;
-
-
 
     std::string outfilename(filelist_file);
     outfilename.append(".result");

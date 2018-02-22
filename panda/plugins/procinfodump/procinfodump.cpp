@@ -26,6 +26,8 @@ extern ram_addr_t ram_size;
 namespace py = pybind11;
 const int READONLY = false;
 
+static bool enable_callstack = false;
+
 extern "C" {
 bool init_plugin(void *);
 void uninit_plugin(void *);
@@ -55,9 +57,13 @@ inline hwaddr roundUpToPageSize(hwaddr addr, hwaddr pagesize) {
 
 std::vector<target_ulong> pandapy_callstack(){
     std::vector<target_ulong> current_callstack(10);
-    int callstacksize =
-        get_functions(current_callstack.data(),
-                    static_cast<int>(current_callstack.size()), current_cpu);
+    int callstacksize = 0;
+
+    if(enable_callstack){
+        callstacksize = get_functions(current_callstack.data(),
+                        static_cast<int>(current_callstack.size()), current_cpu);
+    }
+
     current_callstack.resize(callstacksize);
     return current_callstack;
 }
@@ -172,9 +178,6 @@ void parseTargets(const std::string& file){
 bool init_plugin(void *self) {
     plugin_self = self;
 
-    panda_require("callstack_instr");
-    assert(init_callstack_instr_api());
-
     panda_cb pcb;
     pcb.before_block_exec = before_block_exec;
     panda_register_callback(self, PANDA_CB_BEFORE_BLOCK_EXEC, pcb);
@@ -182,6 +185,7 @@ bool init_plugin(void *self) {
     panda_arg_list *args = panda_get_args("procinfodump");
     const char* filename = panda_parse_string_opt(args, "file", "pids.txt", "file where to take the targets from");
     uint64_t breakpoint = panda_parse_uint64_opt(args, "break", 0, "set a breakpoint, execute a shell and exit");
+    enable_callstack = panda_parse_bool_opt(args, "callstack", "expose callstack to python");
 
     if(breakpoint){
         Target exampletarget(breakpoint, 0);
@@ -192,6 +196,11 @@ bool init_plugin(void *self) {
 
     py::initialize_interpreter(true);
     pymodule = py::module::import("main");
+
+    if(enable_callstack){
+        panda_require("callstack_instr");
+        assert(init_callstack_instr_api());
+    }
 
     return true;
 }

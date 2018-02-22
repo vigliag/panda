@@ -494,13 +494,14 @@ void get_prog_point(CPUState* cpu, prog_point *p) {
     // Get address space identifier
     target_ulong asid = panda_current_asid(ENV_GET_CPU(env));
 
-    // Lump all kernel-mode CR3s together
-
+    /* disabled: Lump all kernel-mode CR3s together -- why?
     if(!in_kernelspace(env)){
         p->cr3 = asid;
     } else {
         p->cr3 = 0;
-    }
+    } */
+
+    p->cr3 = asid;
 
     // Try to get the caller
     int n_callers = 0;
