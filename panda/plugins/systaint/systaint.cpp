@@ -191,7 +191,9 @@ static uint32_t next_available_label = 1000;
 
 //stuff to search in ram
 //if search is specified as parameter
-std::vector<SearchInfo> searches;
+static std::vector<SearchInfo> searches;
+
+static bool log_all_functions = false;
 
 // Wrappers:
 
@@ -265,18 +267,23 @@ static void writeLabelPA(uint64_t pa_addr, size_t size, Label label, bool additi
 #ifdef TARGET_I386
 
 static void finalize_event(CPUState* cpu, std::shared_ptr<Event> event){
+    const int NCALLERS = 10;
+
     // finalizing
     event->ended = rr_get_guest_instr_count();
 
     cout << "EVENT exit " << event->toString() << endl;
 
     if (!no_callstack) {
-      std::vector<target_ulong> current_callstack(10);
-      int callstacksize =
-          get_functions(current_callstack.data(),
-                      static_cast<int>(current_callstack.size()), cpu);
-      current_callstack.resize(callstacksize);
-      event->callstack = std::move(current_callstack);
+
+      std::vector<CallstackStackEntry> entries(NCALLERS);
+      int n_entries = get_call_entries(entries.data(), static_cast<int>(entries.size()), cpu);
+      entries.resize(n_entries);
+
+      for(const auto& cs : entries){
+        event->callstack.push_back(cs.function);
+        event->callidstack.push_back(cs.call_id);
+      }
     }
 }
 
@@ -600,7 +607,7 @@ void on_function_return(CPUState *cpu, target_ulong entrypoint, uint64_t callid,
                 commonFn->memory.readset.size() + commonFn->memory.writeset.size();
         if(memory_access_size > 81920){
             //bail out if function read/wrote too mutch
-        } else if(commonFn->taintedReads > 16){
+        } else if(log_all_functions || (commonFn->taintedReads > 16)){
             finalize_event(cpu, commonFn);
             logEvent(*commonFn, outfp);
         } else if(!searches.empty()){
@@ -911,6 +918,8 @@ void external_event_notif(CPUState *cpu, uint32_t eventid, uint32_t pointer, uin
     logEvent(e, outfp);
 }
 
+//can be null
+static std::string search_file;
 
 void loadConfigFile(const std::string& filename){
     std::ifstream cfgfile(filename);
@@ -936,6 +945,8 @@ void loadConfigFile(const std::string& filename){
     no_callstack = configjson.value("no_callstack", false);
     extevents_as_primary = configjson.value("extevents", false);
     no_syscalls = configjson.value("no_syscalls", false);
+    log_all_functions = configjson.value("log_all", false);
+    search_file = configjson.value("search_file", "");
 
     if(configjson.count("encfns")){
         auto& encfns = configjson.at("encfns");
@@ -1022,11 +1033,10 @@ bool init_plugin(void *self) {
         return false;
 
     const char* cfg_file = panda_parse_string_req(args, "cfg", "Configuration file");
-    const char* search = panda_parse_string_opt(args, "search", nullptr, "List of files whose contents to search in memory");
 
-    if(search){
+    if(!search_file.empty()){
         SearchManager sm(32,4);
-        sm.readFileList(search);
+        sm.readFileList(search_file);
         searches = sm.searches;
         if(searches.empty()){
             cerr << "couldnt load any string to search" << endl;

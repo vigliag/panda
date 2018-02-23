@@ -120,6 +120,7 @@ struct Event {
 
     std::vector<uint32_t> tags;
     std::vector<target_ulong> callstack;
+    std::vector<uint64_t> callidstack;
 
     std::vector<uint32_t> argStack;
 

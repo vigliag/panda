@@ -158,6 +158,10 @@ void logEvent(const Event& event, FILE* filepointer){
         pbEvent->add_callstack(call);
     }
 
+    for(const auto& callid : event.callidstack){
+        pbEvent->add_callidstack(callid);
+    }
+
     for(const auto& buffer : writeBuffers){
         const auto& addr = buffer.base;
 
