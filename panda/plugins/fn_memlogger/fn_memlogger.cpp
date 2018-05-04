@@ -56,6 +56,7 @@ struct CallInfo {
     std::vector<Address> callstack;
     uint64_t instructions_tot = 0;
     uint64_t instructions_arith = 0;
+    uint64_t instructions_mov = 0;
 };
 
 /* Data structures */
@@ -291,6 +292,7 @@ void on_ret(CPUState *cpu, target_ulong entrypoint, uint64_t callid, uint32_t sk
     out["id"] = call.instruction_count_call;
     out["insn_arith"] = call.instructions_arith;
     out["insn_total"] = call.instructions_tot;
+    out["insn_movs"] = call.instructions_mov;
 
     auto writes = nlohmann::json::array();
     for(const bufferinfo& wrb : writebuffs){
@@ -357,15 +359,20 @@ std::set<target_ulong> parse_addr_list(const char* addrs){
 }
 
 
-static const std::regex ArithMnemonicRegex{R"(add|adc|sub|xor|shr|shl|div)"};
+static const std::regex ArithMnemonicRegex{R"(add|adc|sub|xor|shr|shl|div|mul|rol|ror|dec)"};
+static const std::regex MovMnemonicRegex{R"(mov|lea)"};
 class ArithOpsCounter {
 public:
     uint32_t arith = 0;
     uint32_t total = 0;
+    uint32_t movs = 0;
+
     void fromMnemonic(const char* mnemonic){
         total++;
         bool is_arith = std::regex_search(mnemonic, ArithMnemonicRegex);
         if(is_arith) arith++;
+        bool is_mov = std::regex_search(mnemonic, MovMnemonicRegex);
+        if(is_mov) movs++;
     }
 };
 static std::unordered_map<target_ulong, ArithOpsCounter> arithcounters;
@@ -396,7 +403,7 @@ int after_block_exec(CPUState* cpu, TranslationBlock *tb) {
     auto& counter = arithcounters[tb_idx(cpu,tb)];
     call.instructions_arith += counter.arith;
     call.instructions_tot += counter.total;
-
+    call.instructions_mov += counter.movs;
     return 0;
 }
 

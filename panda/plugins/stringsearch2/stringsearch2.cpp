@@ -201,8 +201,8 @@ int mem_callback(CPUState *env, target_ulong pc, target_ulong addr,
                 match.in_kernel = panda_in_kernel(env);
 
                 const char* is_write_str = is_write ? "WRITE" : "READ";
-                printf("%s Match of str %lu at: instr_count=%lu :  " TARGET_FMT_lx " " TARGET_FMT_lx " " TARGET_FMT_lx " %c \n",
-                       is_write_str, search_id, rr_get_guest_instr_count(),
+                printf("%s Match of str %s at: instr_count=%lu :  " TARGET_FMT_lx " " TARGET_FMT_lx " " TARGET_FMT_lx " %c \n",
+                       is_write_str, search.name.c_str(), rr_get_guest_instr_count(),
                        p.caller, p.pc, p.cr3, match.in_kernel? 'K' : 'U');
 
                 if(search.contextbytes){

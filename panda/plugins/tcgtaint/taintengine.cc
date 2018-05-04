@@ -264,7 +264,7 @@ void TaintEngine::moveR2M(RegisterKind regtmp, target_ulong reg,
 
     ShadowRegister *regobj = getRegister(regtmp, reg);
 
-    TRACE("R2M R%c(%.2x %s) -> M(%.8x), lb=%d size=%d", REGCHR(regtmp), reg,
+    TRACE("R2M R%c(%.2x %s) -> M(%.8x), lbl=%d size=%d", REGCHR(regtmp), reg,
           REGNAME(regobj), addr, regobj->firstLabel(), size);
 
     for (unsigned i = 0; i < std::min(size, regobj->getSize()); i++) {
@@ -277,7 +277,7 @@ void TaintEngine::moveR2M(RegisterKind regtmp, target_ulong reg,
             }
         } else {
             // Source is tainted: move
-            TRACE("Taint moving R%c(%.2x %s) -> M(%.8x), lb=%d", REGCHR(regtmp),
+            TRACE("Taint moving R%c(%.2x %s) -> M(%.8x), lbl=%d", REGCHR(regtmp),
                   reg, REGNAME(regobj), addr + i,
                   *regobj->getTaintLocation(i)->getLabels().begin());
             mem_.set(regobj->getTaintLocation(i), addr + i);
@@ -302,7 +302,7 @@ void TaintEngine::moveR2MicroM(RegisterKind regtmp, target_ulong reg,
             }
         } else {
             // Source is tainted: move
-            TRACE("Taint moving R%c(%.2x %s) -> MicroM(%.8x), lb=%d",
+            TRACE("Taint moving R%c(%.2x %s) -> MicroM(%.8x), lbl=%d",
                   REGCHR(regtmp), reg, REGNAME(regobj), addr + i,
                   *regobj->getTaintLocation(i)->getLabels().begin());
             cpuarchstate_.set(regobj->getTaintLocation(i), addr + i);

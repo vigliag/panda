@@ -128,6 +128,8 @@ struct Event {
     EventKind kind = EventKind::unknown;
     uint32_t parent = 0;
 
+    uint32_t stackpointer = 0;
+
     //uint32_t taintedWrites = 0;
     uint32_t taintedReads = 0;
 

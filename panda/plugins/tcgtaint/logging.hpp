@@ -13,7 +13,7 @@
 // 4 = DEBUG
 // 5 = TRACE
 
-#define MAX_LOG_LEVEL 2
+#define MAX_LOG_LEVEL 1
 extern int tcgtaint_loglevel;
 
 // Uncomment to include the program counter (i.e., TB address) in the debug

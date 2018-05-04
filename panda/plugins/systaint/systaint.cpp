@@ -169,6 +169,8 @@ static uint64_t target_taint_at = 0;
 
 static bool set_taint_dereference = false;
 
+static bool use_additive_labels_for_encoding = true;
+
 // Globals:
 //////////////
 
@@ -321,7 +323,10 @@ bool syscall_to_discard(unsigned syscall_no) {
   case 216: // NtPulseEvent (no idea)
   case 271: // NtRaiseException (ehrm... noise?)
   case 168: // NtMapViewOfSection (not so useful, could end up tainting too much data on dereference)
-  case 44:
+  case 236: // NtQueryInformationThread too many of them
+  case 284: // NtReleaseMutant
+  case 88: // NtCreateThreadEx
+  case 44: // NtCallbackReturn
     return true;
   default:
     return false;
@@ -426,7 +431,9 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
     }
 
     if(!current_event){
-        cerr << "WARNING sysexit no=" << sc.callno << " without any current event thread=" << thread.second <<  endl;
+        if(!no_syscalls){
+            cerr << "WARNING sysexit no=" << sc.callno << " without any current event on thread=" << thread.second <<  endl;
+        }
         return;
     }
 
@@ -452,7 +459,10 @@ void on_syscall_exit(CPUState *cpu, const SyscallDef& sc, SysCall call){
  */
 void external_event_enter(CPUState *cpu, uint32_t event_label){
     assert(cpu);
-    assert(event_label);
+    if(!event_label){
+        cout << "hypercall with 0 label, discarding" << endl;
+        return;
+    }
 
     // Start tracking this process if not doing it already
     target_ulong asid = panda_current_asid(cpu);
@@ -494,14 +504,17 @@ void external_event_enter(CPUState *cpu, uint32_t event_label){
 
 
     if (!taintEnabled() && !dont_enable_taint && !target_taint_at) {
-        printf("enabling taint\n");
+        printf("automatically enabling taint on external event\n");
         enableTaint();
     }
 }
 
 void external_event_exit(CPUState *cpu, uint32_t event_label){
     assert(cpu);
-    assert(event_label);
+    if(!event_label){
+        cout << "hypercall with 0 label, discarding exit" << endl;
+        return;
+    }
 
     target_ulong asid = panda_current_asid(cpu);
     if(!monitored_processes.count(asid) && !automatically_add_processes){
@@ -540,6 +553,8 @@ void external_event_exit(CPUState *cpu, uint32_t event_label){
 
 
 void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
+    CPUArchState* env = (CPUArchState*)cpu;
+
     if (panda_in_kernel(cpu) || !monitored_processes.count(panda_current_asid(cpu))){
         return;
     }
@@ -569,9 +584,10 @@ void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
         event->thread = thread;
         event->started = callid;
         event->label = next_available_label++;
-
+        event->stackpointer = env->regs[R_ESP];
         events.put_event(thread, event);
     } else {
+        //TODO allow during encoding calls (it's useful)
         if(!p_current_event && log_common_function_calls){
         //put the function in the map
             auto event = make_shared<Event>();
@@ -580,6 +596,7 @@ void on_function_call(CPUState *cpu, target_ulong entrypoint, uint64_t callid){
             event->thread = thread;
             event->started = callid;
             event->label = next_available_label++;
+            event->stackpointer = env->regs[R_ESP];
             commonFunctions[callid] = event;
         }
     }
@@ -713,7 +730,8 @@ int mem_write_callback(CPUState *cpu, target_ulong pc, target_ulong addr,
                     phisicalAddressesToTaint.insert(physical_address + i);
                 } else {
                     bool additive = false;
-                    if(p_current_event->kind == EventKind::encoding){
+                    if(p_current_event->kind == EventKind::encoding &&
+                            use_additive_labels_for_encoding){
                         additive = true;
                     }
                     writeLabelPA(physical_address+i, 1, p_current_event->getLabel(), additive);
@@ -818,6 +836,7 @@ int systaint_after_block_callback(CPUState *cpu, TranslationBlock *tb){
     if(target_end_count && instr_count > target_end_count){
         rr_end_replay_requested = 1;
     } else if(target_taint_at && instr_count > target_taint_at && !dont_enable_taint && !taintEnabled()){
+        printf("enabling taint at %lu as requested by taintat \n", target_taint_at);
         enableTaint();
     }
 
@@ -871,8 +890,8 @@ int asid_changed_callback(CPUState* cpu, uint32_t oldasid, uint32_t newasid){
     (void) oldasid;
 
     if(monitored_processes.count(newasid)){
-        if (!taintEnabled() && !dont_enable_taint) {
-            printf("enabling taint\n");
+        if (!taintEnabled() && !dont_enable_taint && !target_taint_at) {
+            printf("enabling taint as switching to monitored process\n");
             enableTaint();
         } else if(disable_taint_on_other_processes){
             tcgtaint_set_taint_status(false);
@@ -947,6 +966,7 @@ void loadConfigFile(const std::string& filename){
     no_syscalls = configjson.value("no_syscalls", false);
     log_all_functions = configjson.value("log_all", false);
     search_file = configjson.value("search_file", "");
+    use_additive_labels_for_encoding = configjson.value("additive_encoding", true);
 
     if(configjson.count("encfns")){
         auto& encfns = configjson.at("encfns");
@@ -1033,6 +1053,7 @@ bool init_plugin(void *self) {
         return false;
 
     const char* cfg_file = panda_parse_string_req(args, "cfg", "Configuration file");
+    debug_logs = panda_parse_bool_opt(args, "debug", "enable debug logs");
 
     if(!search_file.empty()){
         SearchManager sm(32,4);
@@ -1093,6 +1114,7 @@ bool init_plugin(void *self) {
     //TODO now probably useless
     panda_do_flush_tb();
     panda_enable_precise_pc();
+    cout << "TAINT DEREFERENCE " << set_taint_dereference << std::endl;
     tcgtaint_set_taint_dereference(set_taint_dereference);
 
 #endif

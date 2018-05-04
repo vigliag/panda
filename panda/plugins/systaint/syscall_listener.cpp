@@ -78,9 +78,6 @@ we check if it was the Sysenter we saw before */
 int sc_listener_exec_callback(CPUState *cpu, target_ulong pc) {
 
 #ifdef TARGET_I386
-    //temporarily disabling through this:
-    //return false;
-
     auto current_asid = panda_current_asid(cpu);
 
     if(!monitored_processes.count(current_asid))

@@ -110,7 +110,8 @@ def dumpProcess(pid):
         print(e)
     for i in s.plugins.dlldump(pid, dump_dir=dirname).collect():
        print(i)
-    print(s.plugins.memdump(pid, dump_dir=dirname))
+    #print(s.plugins.memdump(pid, dump_dir=dirname))
+    print(s.plugins.vaddump(pid, dump_dir=dirname))
 
 
 def vads(pid):

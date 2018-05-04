@@ -84,21 +84,6 @@ static void on_enter_extra(CPUState *cpu, uint32_t eventid){
             rr_requested_name = g_strdup("sysrec");
         }
     }
-
-    if(record_pids){
-        OsiProc * proc = get_current_process(cpu);
-        if(proc && (proc->pid > 4)){
-            auto& p = pids[proc->pid];
-            p.proc = proc;
-            const uint64_t guest_icount = rr_get_guest_instr_count();
-            p.last_instruction = guest_icount;
-
-            if (p.first_instruction == 0){
-                p.first_instruction = guest_icount;
-                p.mmap = get_modules(cpu, p.proc);
-            }
-        }
-    }
 }
 
 #ifdef TARGET_I386
@@ -111,9 +96,10 @@ void hypercall_event_listener(CPUState *cpu){
     printf("HYPERCALL " TARGET_FMT_ld " " TARGET_FMT_ld " " TARGET_FMT_ld "\n",
          env->regs[R_EBX], env->regs[R_ECX], env->regs[R_EDX]);
 
-    uint32_t cuckoo_event = env->regs[R_ECX];
-    uint32_t pointer = env->regs[R_EDX];
-    uint32_t len = env->regs[R_ESI];
+    uint32_t event_id = env->regs[R_ECX];
+
+    uint32_t buffer_address = env->regs[R_EDX];
+    uint32_t buffer_len = env->regs[R_ESI];
 
     const char* etype = nullptr;
 
@@ -121,17 +107,17 @@ void hypercall_event_listener(CPUState *cpu){
         case HYPERCALL_SYSCALL_ENTER:
             //printf("SYSEVENT enter: %" PRIu32 " \n", cuckoo_event);
             etype = "enter";
-            on_enter_extra(cpu, cuckoo_event);
-            PPP_RUN_CB(on_sysevent_enter, cpu, cuckoo_event);
+            on_enter_extra(cpu, event_id);
+            PPP_RUN_CB(on_sysevent_enter, cpu, event_id);
         break;
         case HYPERCALL_SYSCALL_EXIT:
              //printf("SYSEVENT exit: %" PRIu32 " \n", cuckoo_event);
             etype = "exit";
-            PPP_RUN_CB(on_sysevent_exit, cpu, cuckoo_event);
+            PPP_RUN_CB(on_sysevent_exit, cpu, event_id);
         break;
         case HYPERCALL_NOTIF:
             etype = "notif";
-            PPP_RUN_CB(on_sysevent_notif, cpu, cuckoo_event, pointer, len);
+            PPP_RUN_CB(on_sysevent_notif, cpu, event_id, buffer_address, buffer_len);
         break;
         default:
             etype = "error";
@@ -151,6 +137,24 @@ void hypercall_event_listener(CPUState *cpu){
         event["asid"] = panda_current_asid(cpu);
         event["pc"] = cpu->panda_guest_pc;
         events_outfp << event.dump() << std::endl;
+    }
+
+    if(record_pids &&
+        (env->regs[R_EBX] == HYPERCALL_SYSCALL_ENTER ||
+         env->regs[R_EBX] == HYPERCALL_NOTIF)){
+
+        OsiProc * proc = get_current_process(cpu);
+        if(proc && (proc->pid > 4)){
+            auto& p = pids[proc->pid];
+            p.proc = proc;
+            const uint64_t guest_icount = rr_get_guest_instr_count();
+            p.last_instruction = guest_icount;
+
+            if (p.first_instruction == 0){
+                p.first_instruction = guest_icount;
+                p.mmap = get_modules(cpu, p.proc);
+            }
+        }
     }
 }
 #endif
@@ -201,7 +205,6 @@ void uninit_plugin(void *self) {
     if(record_pids){
         std::ostream& out = pids_outfp.is_open()? pids_outfp : std::cout;
 
-        out << std::endl;
         for (auto const& x : pids)
         {
             nlohmann::json result;
@@ -216,7 +219,7 @@ void uninit_plugin(void *self) {
 
             result["first_instruction"] = proc.first_instruction;
             result["last_instruction"] = proc.last_instruction;
-            result["mmap"] = proc.mmap;
+            //result["mmap"] = proc.mmap;
 
             out << result << std::endl;
             //free_osiproc(proc.proc);
