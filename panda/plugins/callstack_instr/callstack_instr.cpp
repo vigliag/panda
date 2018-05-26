@@ -40,7 +40,6 @@ PANDAENDCOMMENT */
 
 extern "C" {
 #include "panda/plog.h"
-
 #include "callstack_instr_int_fns.h"
 
 bool translate_callback(CPUState* cpu, target_ulong pc);
@@ -414,7 +413,9 @@ uint64_t get_current_callid(CPUState* cpu){
     return v.back().call_id;
 }
 
-// Public interface implementation
+/**
+ * @brief Fills preallocated buffer \p callers with up to \p n call addresses.
+ */
 int get_callers(target_ulong callers[], int n, CPUState* cpu) {
     std::vector<stack_entry> &v = callstacks[get_stackid(cpu)];
     auto rit = v.rbegin();
@@ -444,16 +445,20 @@ int get_call_entries(struct CallstackStackEntry entries[], int n, CPUState *cpu)
 }
 
 #define CALLSTACK_MAX_SIZE 16
-// writes an entry to the pandalog with callstack info (and instr count and pc)
+/**
+ * @brief Creates a pandalog entry with the callstack information.
+ */
 Panda__CallStack *pandalog_callstack_create() {
     assert (pandalog);
     CPUState *cpu = first_cpu;
     uint32_t n = 0;
+
     std::vector<stack_entry> &v = callstacks[get_stackid(cpu)];
     auto rit = v.rbegin();
     for (/*no init*/; rit != v.rend() && n < CALLSTACK_MAX_SIZE; ++rit) {
         n ++;
     }
+
     Panda__CallStack *cs = (Panda__CallStack *) malloc (sizeof(Panda__CallStack));
     *cs = PANDA__CALL_STACK__INIT;
     cs->n_addr = n;
@@ -464,23 +469,30 @@ Panda__CallStack *pandalog_callstack_create() {
     for (/*no init*/; rit != v.rend() && n < CALLSTACK_MAX_SIZE; ++rit, ++i) {
         cs->addr[i] = rit->return_address;
     }
+
     return cs;
 }
 
 
+/**
+ * @brief Frees a pandalog entry containing callstack information.
+ */
 void pandalog_callstack_free(Panda__CallStack *cs) {
     free(cs->addr);
     free(cs);
 }
 
 
-int get_functions(target_ulong functions[], int n, CPUState* cpu) {
+/**
+ * @brief Fills preallocated buffer \p functions with up to \p n function addresses.
+ */
+uint32_t get_functions(target_ulong functions[], uint32_t n, CPUState* cpu) {
     auto &v = callstacks[get_stackid(cpu)];
     if (v.empty()) {
         return 0;
     }
     auto rit = v.rbegin();
-    int i = 0;
+    uint32_t i = 0;
     for (/*no init*/; rit != v.rend() && i < n; ++rit, ++i) {
         functions[i] = rit->function;
     }
@@ -527,15 +539,18 @@ void get_prog_point(CPUState* cpu, prog_point *p) {
 bool init_plugin(void *self) {
 #if defined(TARGET_I386)
     if (cs_open(CS_ARCH_X86, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
+        return false;
 #if defined(TARGET_X86_64)
     if (cs_open(CS_ARCH_X86, CS_MODE_64, &cs_handle_64) != CS_ERR_OK)
+        return false;
 #endif
 #elif defined(TARGET_ARM)
     if (cs_open(CS_ARCH_ARM, CS_MODE_ARM, &cs_handle_32) != CS_ERR_OK)
+        return false;
 #elif defined(TARGET_PPC)
     if (cs_open(CS_ARCH_PPC, CS_MODE_32, &cs_handle_32) != CS_ERR_OK)
-#endif
         return false;
+#endif
 
     // Need details in capstone to have instruction groupings
     cs_option(cs_handle_32, CS_OPT_DETAIL, CS_OPT_ON);
@@ -559,7 +574,7 @@ bool init_plugin(void *self) {
 
     const char *stackid_strategy_str = panda_parse_string_opt(args, "stackid_strategy", nullptr, "strategy to employ in obtaining a stack identifier (thread_id, heuristic, asid)");
     if (stackid_strategy_str == nullptr) {
-        if(panda_os_type == OST_WINDOWS && 0 == strcmp(panda_os_details, "7")){
+        if(panda_os_familyno == OS_WINDOWS && 0 == strcmp(panda_os_variant, "7")){
             stackid_strategy = StackidStrategy::THREAD_ID;
         } else {
             stackid_strategy = StackidStrategy::ASID;
@@ -592,3 +607,5 @@ bool init_plugin(void *self) {
 
 void uninit_plugin(void *self) {
 }
+
+/* vim: set tabstop=4 softtabstop=4 expandtab ft=cpp: */

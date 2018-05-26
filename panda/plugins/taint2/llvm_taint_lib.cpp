@@ -48,8 +48,8 @@ extern bool tainted_pointer;
 PPP_PROT_REG_CB(on_branch2);
 PPP_CB_BOILERPLATE(on_branch2);
 
-PPP_PROT_REG_CB(on_non_const_eip);
-PPP_CB_BOILERPLATE(on_non_const_eip);
+PPP_PROT_REG_CB(on_indirect_jump);
+PPP_CB_BOILERPLATE(on_indirect_jump);
 
 PPP_PROT_REG_CB(on_ptr_load);
 PPP_CB_BOILERPLATE(on_ptr_load);
@@ -114,10 +114,10 @@ void taint_pointer_run(uint64_t src, uint64_t ptr, uint64_t dest, bool is_store,
     }
 }
 
-static void taint_storeEip_run(FastShad *shad, uint64_t src, uint64_t size) {
+static void taint_copyRegToPc_run(FastShad *shad, uint64_t src, uint64_t size) {
     // this arg should be the register number
     Addr a = make_laddr(src / MAXREGSIZE, 0);
-    PPP_RUN_CB(on_non_const_eip, a, size);
+    PPP_RUN_CB(on_indirect_jump, a, size);
 }
 
 extern const char* qemu_file;
@@ -212,14 +212,14 @@ bool PandaTaintFunctionPass::doInitialization(Module &M) {
     assert(PTV.branchF);
     EE->addGlobalMapping(PTV.branchF, (void *)taint_branch_run);
 
-    PTV.storeEipF = M.getFunction("taint_storeEip");
-    if (!PTV.storeEipF) { // insert
-        PTV.storeEipF = Function::Create(
+    PTV.copyRegToPcF = M.getFunction("taint_copyRegToPc");
+    if (!PTV.copyRegToPcF) { // insert
+        PTV.copyRegToPcF = Function::Create(
             FunctionType::get(llvm::Type::getVoidTy(ctx), argTs, false /*isVarArg*/),
-            GlobalVariable::ExternalLinkage, "taint_storeEip", &M);
+            GlobalVariable::ExternalLinkage, "taint_copyRegToPc", &M);
     }
-    assert(PTV.storeEipF);
-    EE->addGlobalMapping(PTV.storeEipF, (void *)taint_storeEip_run);
+    assert(PTV.copyRegToPcF);
+    EE->addGlobalMapping(PTV.copyRegToPcF, (void *)taint_copyRegToPc_run);
 #define ADD_MAPPING(func) \
     EE->addGlobalMapping(M.getFunction(#func), (void *)(func));\
     M.getFunction(#func)->deleteBody();
@@ -252,7 +252,7 @@ bool PandaTaintFunctionPass::doInitialization(Module &M) {
 }
 
 bool PandaTaintFunctionPass::runOnFunction(Function &F) {
-#ifdef TAINTDEBUG
+#ifdef TAINT2_DEBUG
     //printf("\n\n%s\n", F.getName().str().c_str());
 #endif
     if (F.front().front().getMetadata("tainted") ||
@@ -269,7 +269,7 @@ bool PandaTaintFunctionPass::runOnFunction(Function &F) {
             PTV.visit(I);
         }
     }
-#ifdef TAINTDEBUG
+#ifdef TAINT2_DEBUG
     //F.dump();
     /*std::string err;
     if (F.getName().startswith("tcg-llvm-tb-")) {
@@ -663,14 +663,14 @@ void PandaTaintVisitor::insertTaintBranch(Instruction &I, Value *cond) {
     inlineCallBefore(I, branchF, args);
 }
 
-void PandaTaintVisitor::insertStoreEip(Instruction &I, Value *new_eip) {
-    if (isa<Constant>(new_eip)) return;
+void PandaTaintVisitor::insertTaintQueryNonConstPc(Instruction &I, Value *new_pc) {
+    if (isa<Constant>(new_pc)) return;
     LLVMContext &ctx = I.getContext();
 
     vector<Value *> args{
-        llvConst, constSlot(new_eip), const_uint64(ctx, getValueSize(new_eip))
+        llvConst, constSlot(new_pc), const_uint64(ctx, getValueSize(new_pc))
     };
-    inlineCallBefore(I, storeEipF, args);
+    inlineCallBefore(I, copyRegToPcF, args);
 }
 
 // Terminator instructions
@@ -910,8 +910,10 @@ void PandaTaintVisitor::insertStateOp(Instruction &I) {
         } else {
             ptrConst = gsvConst;
             ptrAddr = addr.val.gs;
+        }
+
 #if defined(TARGET_ARM)
-        if (ptrAddr == cpu_off(pc) && isStore) {
+        if (ptrAddr == cpu_off(regs[15]) && isStore) {
 #elif defined(TARGET_I386)
         if (ptrAddr == cpu_off(eip) && isStore) {
 #elif defined(TARGET_PPC)
@@ -919,11 +921,10 @@ void PandaTaintVisitor::insertStateOp(Instruction &I) {
 #else
 #error "unsupported architecture"
 #endif
-                 // we are storing to eip
-                 // insert instrumentation before for querying taint
-                 // on LLVM register `val` being stored
-                insertStoreEip(I, val);
-            }
+             // we are storing to pc
+             // insert instrumentation before for querying taint
+             // on LLVM register `val` being stored
+            insertTaintQueryNonConstPc(I, val);
         }
 
         Constant *destConst = isStore ? ptrConst : llvConst;

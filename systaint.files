@@ -1,3 +1,4 @@
+cpu-exec.c
 panda/plugins/asid_instr_count/asid_instr_count.cpp
 panda/plugins/asid_instr_count/asid_instr_count.h
 panda/plugins/asid_instr_count/asid_instr_count_int.h
@@ -248,6 +249,7 @@ panda/plugins/wintrospection/wintrospection.c
 panda/plugins/wintrospection/wintrospection.h
 panda/plugins/wintrospection/wintrospection_int.h
 panda/plugins/wintrospection/wintrospection_int_fns.h
+qemu-options.hx
 xen-mapcache.c
 accel.c
 aio-posix.c

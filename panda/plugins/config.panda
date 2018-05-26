@@ -17,6 +17,12 @@ wintrospection
 asid_instr_count
 replaymovie
 memsavep
+unigrams
+textprinter
+net
+network
+filereadmon
+win2000x86intro
 systaint
 tcgtaint
 fn_memlogger
