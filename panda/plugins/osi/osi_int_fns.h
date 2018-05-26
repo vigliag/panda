@@ -14,6 +14,8 @@ OsiModules *get_modules(CPUState *env);
 // returns the same type as get_modules
 OsiModules *get_libraries(CPUState *env, OsiProc *p);
 
+target_ulong get_current_thread_id(CPUState *cpu);
+
 // Free memory allocated by other library functions
 void free_osiproc(OsiProc *p);
 void free_osiprocs(OsiProcs *ps);

@@ -48,10 +48,10 @@
 #include "taint_api.h"
 #include "taint2_hypercalls.h"
 
-extern "C" {
 #include "callstack_instr/callstack_instr.h"
 #include "callstack_instr/callstack_instr_ext.h"
 
+extern "C" {
 bool init_plugin(void *);
 void uninit_plugin(void *);
 int after_block_translate(CPUState *cpu, TranslationBlock *tb);

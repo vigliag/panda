@@ -36,12 +36,12 @@
 extern "C" {
 #include <stdio.h>
 
-#include "callstack_instr/callstack_instr.h"
-#include "callstack_instr/callstack_instr_ext.h"
-
 bool init_plugin(void *);
 void uninit_plugin(void *);
 }
+
+#include "callstack_instr/callstack_instr.h"
+#include "callstack_instr/callstack_instr_ext.h"
 
 using namespace std;
 

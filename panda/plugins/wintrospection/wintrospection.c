@@ -511,9 +511,28 @@ void on_free_osimodules(OsiModules *ms) {
     free(ms);
 }
 
+/**
+ * Gets the current thread identifier on 32bit windows NT systems
+ * Only works in user-space, where the FS segment points to the TIB
+ * @see https://en.wikipedia.org/wiki/Win32_Thread_Information_Block
+ */
+uint32_t get_current_tid(CPUState* cpu){
+    if(panda_in_kernel(cpu)) return 0;
 
+    CPUArchState *env = (CPUArchState*)cpu->env_ptr;
+    uint32_t tib_address = env->segs[R_FS].base;
+    uint32_t curr_thread_id_address = tib_address + 0x24;
 
-#endif
+    uint32_t curr_thread_id;
+    panda_virtual_memory_read(cpu, curr_thread_id_address, (uint8_t*)(&curr_thread_id), 4);
+    return curr_thread_id;
+}
+
+void on_get_current_threadid(CPUState* cpu, target_ulong* out_threadid){
+    *out_threadid = get_current_tid(cpu);
+}
+
+#endif //target i386
 
 
 bool init_plugin(void *self) {
@@ -567,6 +586,7 @@ bool init_plugin(void *self) {
     PPP_REG_CB("osi", on_free_osiproc, on_free_osiproc);
     PPP_REG_CB("osi", on_free_osiprocs, on_free_osiprocs);
     PPP_REG_CB("osi", on_free_osimodules, on_free_osimodules);
+    PPP_REG_CB("osi", on_get_current_threadid, on_get_current_threadid);
 
     return true;
 #else

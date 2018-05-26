@@ -45,6 +45,8 @@ PPP_PROT_REG_CB(on_get_libraries)
 PPP_PROT_REG_CB(on_free_osiproc)
 PPP_PROT_REG_CB(on_free_osiprocs)
 PPP_PROT_REG_CB(on_free_osimodules)
+PPP_PROT_REG_CB(on_get_current_threadid)
+
 #ifdef OSI_PROC_EVENTS
 PPP_PROT_REG_CB(on_new_process)
 PPP_PROT_REG_CB(on_finished_process)
@@ -57,6 +59,8 @@ PPP_CB_BOILERPLATE(on_get_libraries)
 PPP_CB_BOILERPLATE(on_free_osiproc)
 PPP_CB_BOILERPLATE(on_free_osiprocs)
 PPP_CB_BOILERPLATE(on_free_osimodules)
+PPP_CB_BOILERPLATE(on_get_current_threadid)
+
 #ifdef OSI_PROC_EVENTS
 PPP_CB_BOILERPLATE(on_new_process)
 PPP_CB_BOILERPLATE(on_finished_process)
@@ -102,6 +106,11 @@ void free_osimodules(OsiModules *ms) {
     PPP_RUN_CB(on_free_osimodules, ms);
 }
 
+target_ulong get_current_thread_id(CPUState *cpu){
+    target_ulong ret = 0;
+    PPP_RUN_CB(on_get_current_threadid, cpu, &ret);
+    return 0;
+}
 
 #ifdef OSI_PROC_EVENTS
 int asid_changed(CPUState *cpu, target_ulong oldval, target_ulong newval) {

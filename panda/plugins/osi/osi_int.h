@@ -21,6 +21,7 @@ typedef void OsiProc;
 typedef void OsiProcs;
 typedef void OsiModules;
 typedef void CPUState;
+typedef void target_ulong;
 
 #include "osi_int_fns.h"
 

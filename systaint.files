@@ -171,6 +171,7 @@ panda/plugins/taint2/label_set.h
 panda/plugins/taint2/llvm_taint_lib.cpp
 panda/plugins/taint2/llvm_taint_lib.h
 panda/plugins/taint2/my_mem.cpp
+panda/plugins/taint2/my_mem.cpp
 panda/plugins/taint2/my_mem.h
 panda/plugins/taint2/panda_hypercall_struct.h
 panda/plugins/taint2/shad_dir.h
@@ -180,6 +181,7 @@ panda/plugins/taint2/shad_dir_64.cpp
 panda/plugins/taint2/shad_dir_64.h
 panda/plugins/taint2/taint2.cpp
 panda/plugins/taint2/taint2.h
+panda/plugins/taint2/taint2_hypercalls.cpp
 panda/plugins/taint2/taint2_int.h
 panda/plugins/taint2/taint2_int_fns.h
 panda/plugins/taint2/taint_api.cpp
