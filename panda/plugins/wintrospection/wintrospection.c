@@ -513,7 +513,8 @@ void on_free_osimodules(OsiModules *ms) {
 
 /**
  * Gets the current thread identifier on 32bit windows NT systems
- * Only works in user-space, where the FS segment points to the TIB
+ * Only works in user-space, where the FS segment points to the TIB.
+ * Only tested on Windows 7 SP1 x86
  * @see https://en.wikipedia.org/wiki/Win32_Thread_Information_Block
  */
 uint32_t get_current_tid(CPUState* cpu){

@@ -401,10 +401,10 @@ uint64_t get_current_callid(CPUState* cpu){
 /**
  * @brief Fills preallocated buffer \p callers with up to \p n call addresses.
  */
-int get_callers(target_ulong callers[], int n, CPUState* cpu) {
+uint32_t get_callers(target_ulong callers[], uint32_t n, CPUState* cpu) {
     std::vector<stack_entry> &v = callstacks[get_stackid(cpu)];
     auto rit = v.rbegin();
-    int i = 0;
+    uint32_t i = 0;
     for (/*no init*/; rit != v.rend() && i < n; ++rit, ++i) {
         callers[i] = rit->return_address;
     }
