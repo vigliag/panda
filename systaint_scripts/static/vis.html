@@ -1,0 +1,301 @@
+
+<!doctype html>
+<html>
+<head>
+  <title>Network | Basic usage</title>
+  <meta charset="UTF-8">
+  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/vis/4.21.0/vis.min.css" rel="stylesheet" type="text/css" />
+
+  <style type="text/css">
+    body {
+      font-family: sans-serif;
+      font-size: 80%;
+      word-wrap: break-word;
+    }
+    pre {
+      word-wrap: break-word;
+    }
+    #mynetwork {
+      /*width: 90%;*/
+      height: 600px;
+      border: 1px solid lightgray;
+      flex-grow: 4;
+    }
+    #detailpane {
+      flex-grow: 1;
+      padding-left: 10px;
+      width: 300px;
+    }
+    #reads {
+      font-size: 10px;
+    }
+    #container {
+      display:flex;
+    }
+  </style>
+</head>
+<body>
+<h2>Visualising <span id="vistitle"></span></h2>
+<div id="container">
+
+  <div id="mynetwork">
+
+  </div>
+  <div id="detailpane">
+    <div id="buttons">
+        <button id="fromButton">Open from</button>
+        <button id="toButton">Open to</button>
+        <button id="toggleHierarchical">toggle Hierarchical</button>
+    </div>
+    <h3>Details <span id="detailtitle"></span></h3> 
+    <pre id="detaildetail">
+    </pre>
+    <h4>Api</h4>
+    <pre id="tag"></pre>
+    <h4>Reads</h4>
+    <p id="reads"></p>
+  </div>
+</div>
+
+<script type="text/javascript">
+
+let viewData = {
+  query : null
+}
+
+let network;
+
+let hoptions = {
+  direction: "UD",
+  sortMethod: "directed",
+  nodeSpacing: 400
+}
+
+let networkOptions = {
+  "edges": {
+    "smooth": false
+  },
+  "physics": {
+    "forceAtlas2Based": {
+      "gravitationalConstant": -80,
+      "centralGravity": 0.005,
+      "springLength": 140,
+      "springConstant": 0.105,
+      "damping": 0.89,
+      "avoidOverlap": 0.46
+    },
+    "minVelocity": 0.75,
+    "solver": "forceAtlas2Based"
+  },
+  layout: {
+    //improvedLayout: false,
+    hierarchical: false
+  },
+}
+
+function setTitle(title){
+  document.getElementById("vistitle").innerText = title;
+}
+
+function showQuery(){
+  let query = viewData.query;
+  document.getElementById("detailtitle").innerText = `query : ${query.api} ${query.uniqhash}` ;
+  document.getElementById("detaildetail").innerText = JSON.stringify(query, null, 2);
+  document.getElementById("reads").innerHTML = "";
+  document.getElementById("tag").innerText = "";
+}
+
+function getDetails(nodeid){
+  if(nodeid == "query"){
+    showQuery();
+    return;
+  }
+
+  return fetch("/node/" + nodeid)
+    .then(response => response.json())
+    .then(data => {
+      document.getElementById("detailtitle").innerText = nodeid;
+      document.getElementById("detaildetail").innerText = JSON.stringify(data.event, null, 2);
+      document.getElementById("reads").innerHTML = data.reads.map(x => JSON.stringify(x, null, 2)).join("\n").replace(/\n/g, " <br> ").replace(/\\\\x/g, "\\x").replace(/\\x00/g, "");
+      document.getElementById("tag").innerText = JSON.stringify(data.tag, null, 2);;
+    })
+}
+
+function getEdge(from, to){
+  return fetch("/edge?frm=" + from + "&to="+to)
+  .then( response => response.json())
+  .then( data => {
+    document.getElementById("detailtitle").innerText = `Edge from ${from} to ${to}`;
+    document.getElementById("detaildetail").innerText = "";
+    document.getElementById("reads").innerHTML = data.map(x => JSON.stringify(x, null, 2)).join("\n").replace(/\n/g, " <br> ");
+    document.getElementById("tag").innerText = "";
+  });
+};
+
+function queryToTag(tag){
+  let depth = 6;
+  let mindepsize = 2;
+
+  fetch(`/totag/${tag}?depth=${depth}&mindepsize=${mindepsize}`)
+  .then( response => response.json())
+  .then(onData)
+  .then( () => setTitle(`to ${tag}`));
+};
+
+function queryFromTag(tag){
+  fetch("/fromtag/" + tag)
+  .then( response => response.json())
+  .then(onData)
+  .then( () => setTitle(`from ${tag}`));
+};
+
+window.document.body.onload = function(){
+  document.getElementById("fromButton").addEventListener("click", function(){
+    let tag = window.prompt("tag?", viewData.query.uniqhash || "");
+    if(tag){
+      window.location.hash = `${tag}:from`
+    }
+  })
+
+  document.getElementById("toButton").addEventListener("click", function(){
+    let tag = window.prompt("tag?", viewData.query.uniqhash || "");
+    if(tag){
+      window.location.hash = `${tag}:to`
+    }
+  })
+
+  document.getElementById("toggleHierarchical").addEventListener("click", function(){
+    if(networkOptions.layout.hierarchical){
+      networkOptions.layout.hierarchical = false;
+    } else {
+      networkOptions.layout.hierarchical = hoptions;
+    } 
+    network.setOptions(networkOptions);
+  })
+
+  
+};
+
+function navigateFromHash(){
+  let hash = window.location.hash.substr(1);
+  if(!hash) return;
+  
+  let [tag, verb] = hash.split(":");
+  if(verb == "from"){
+    queryFromTag(tag);
+  } else {
+    queryToTag(tag);
+  } 
+}
+
+window.addEventListener("hashchange", function(){
+  navigateFromHash();
+});
+
+
+function onData(data){
+  console.log(data);
+
+  if(data.nodes.length > 800 || data.edges.length > 1200){
+    alert(`can't render, too much ${data.nodes.length} ${data.edges.length}` );
+    return;
+  }
+
+  viewData.nodes = data.nodes || [];
+  viewData.edges = data.edges || [];
+  viewData.query = data.query || {};
+
+  // create an array with nodes
+  var nodes = new vis.DataSet(data.nodes);
+
+  // create an array with edges
+  var edges = new vis.DataSet(data.edges);
+
+  // create a network
+  var container = document.getElementById('mynetwork');
+  var network_data = {
+    nodes: nodes,
+    edges: edges
+  };
+
+
+/*
+  var options = {
+    physics:true,
+    layout: {
+      //improvedLayout: false,
+      hierarchical: false
+      },
+      
+    };
+*/
+var options = {
+  "edges": {
+    "smooth": false
+  },
+  "physics": {
+    "forceAtlas2Based": {
+      "gravitationalConstant": -80,
+      "centralGravity": 0.005,
+      "springLength": 140,
+      "springConstant": 0.105,
+      "damping": 0.89,
+      "avoidOverlap": 0.46
+    },
+    "minVelocity": 0.75,
+    "solver": "forceAtlas2Based"
+  },
+  layout: {
+    //improvedLayout: false,
+    hierarchical: false
+  },
+}
+
+  network = new vis.Network(container, network_data, options);
+  network.on("click", function(params){
+
+    if(params.nodes.length){
+      let node = params.nodes[0];
+      if(node)
+        getDetails(node);
+      return;
+    }
+
+    if(params.edges.length){
+      let e = edges.get(params.edges[0]);
+      console.log(e);
+      getEdge(e.from, e.to);
+    }
+
+  });
+
+  network.on("stabilizationIterationsDone", function () {
+    network.setOptions( { physics: false });
+  });
+}
+
+var fns = {
+  queryToTag,
+  queryFromTag
+}
+
+//queryToTag(2664014375);
+if(window.location.hash){
+  navigateFromHash();
+} else {
+  window.location.hash = "10835:from"
+}
+
+/*
+fetch("/data")
+  .then( response => response.json())
+  .then(onData);
+*/
+
+
+</script>
+
+
+</body>
+</html>
