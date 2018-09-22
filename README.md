@@ -1,3 +1,39 @@
+# SysTaint
+
+In my thesis work, SysTaint, we explored the use of full-system record-replay approaches to study and reverse engineer malware, with the goal of easing the analysis of malware whose behavior depends on
+network communications with external servers under the control of malicious actors.
+
+We developed our solution on top of the PANDA reverse engineering platform, writing plugins to perform data-flow analysis on the data the sample exchanges with the operating system and to collect in-depth
+data about the sample's internal functions.
+
+My thesis is available here
+([text](https://www.gabrieleviglianisi.com/files/GabrieleViglianisi-SysTaint-Thesis.pdf),
+[defense slides](https://www.gabrieleviglianisi.com/files/GabrieleViglianisi-SysTaint-Thesis-Defense.pdf)).
+
+The main changes with respect to the PANDA codebase are detailed below. All plugins target Windows 7 x86 SP1:
+
+#### New plugins
+
+- [SysTaint](panda/plugins/systaint/) collects in-depth data about the inner functions of a sample under analysis. It uses taint analysis to track the flow of data between system calls and previously identified cryptographic and compression functions, and annotates the inputs to the sample's inner functions with provenance information.
+- [Fnmemlogger](panda/plugins/fnmemlogger) collects statistics about the functions called by the sample, which we use to recognize cryptographic functions by using heuristics
+- [Procinfodump](panda/plugins/procinfodump) collects information about the processes in the recording at a given list of points in time. It embeds a python interpreter to efficiently use Rekall on the guest's memory, dumping the memory pages and the memory maps, and extracting the list of functions exported by all DLLs in a process's address space.
+- [Tcgtaint](panda/plugins/tcgtaint) Is an alternative, tcg-based, taint tracking implementation, ported from the one used in [Qtrace](https://github.com/rpaleari/qtrace). It's fast and flexible, but works at byte-level and does not instrument the whole x86 instruction set. It requires minor changes to  QEMU's TCG, which have been added under the `CONFIG_QTRACE_TAINT` ifdef.
+- [SysEvent](panda/plugins/sysevent) Receives hypercalls signalling the start and end of an event of a given thread. Used for Cuckoo Monitor integration.
+
+#### Changes to existing plugins
+
+- [StringSearch2](panda/plugins/stringsearch2) adds functionalities to the original stringsearch plugin: loading of the search terms from a directory (with automatic chunking), richer output in json format. 
+- [CallstackInstr](panda/plugins/callstack_instr) was refactored. It assigns a unique identifier to the individual function calls, and uses the thread identifier to distinguish threads in Windows7 x86
+
+#### Other code:
+
+- [Analysis script](systaint_scripts) containing python functions to use in the various phases of the analysis (still need some cleanup)
+- [Patched version of Cuckoo Monitor](https://github.com/vigliag/cuckoo_monitor_panda) that communicates with the SysEvent plugins via hypercalls.
+- [Cuckoo with very minor edits](https://github.com/vigliag/cuckoo) to QEMU machinery module and to the script processing logs about Windows analyses.
+
+---
+
+
 # PANDA
 
 [![Build Status](https://travis-ci.org/panda-re/panda.svg?branch=master)](https://travis-ci.org/panda-re/panda)
