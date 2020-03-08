@@ -7,8 +7,8 @@ We developed our solution on top of the PANDA reverse engineering platform, writ
 data about the sample's internal functions.
 
 My thesis is available here
-([text](https://www.gabrieleviglianisi.com/files/GabrieleViglianisi-SysTaint-Thesis.pdf),
-[defense slides](https://www.gabrieleviglianisi.com/files/GabrieleViglianisi-SysTaint-Thesis-Defense.pdf)).
+([text](https://vigliag.github.io/files/systaint-thesis.pdf),
+[defense slides](https://vigliag.github.io/files/systaint-thesis-defense.pdf)).
 
 The main changes with respect to the PANDA codebase are detailed below. All plugins target Windows 7 x86 SP1:
 
